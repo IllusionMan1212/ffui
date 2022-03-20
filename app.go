@@ -13,6 +13,8 @@ import (
 	"github.com/gabriel-vasile/mimetype"
 )
 
+var checkmark = lipgloss.NewStyle().Foreground(lipgloss.Color("#22FF33")).Render("✔")
+
 type model struct {
 	IsDirectory     bool
 	Path            string
@@ -22,6 +24,7 @@ type model struct {
 	Spinner         spinner.Model
 	Progress        float64
 	Program         *tea.Program
+	Quitting        bool
 }
 
 func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
@@ -37,6 +40,7 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
 		Files:           make([]string, 0),
 		Spinner:         s,
 		Progress:        0.0,
+		Quitting:        false,
 	}
 }
 
@@ -68,10 +72,17 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case finishedEncodingVideo:
 		m.Files = m.Files[:len(m.Files)-1]
 
+		if len(m.Files) == 0 {
+			return m, m.gracefullyQuit
+		}
+
 		return m, encodeVideo
 	case updateProgress:
 		m.Progress = msg.progress
 		return m, nil
+	case quitMsg:
+		m.Quitting = true
+		return m, tea.Quit
 	}
 
 	m.Spinner, cmd = m.Spinner.Update(msg)
@@ -80,11 +91,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m model) View() string {
-	if m.IsDirectory {
-		return fmt.Sprintf("%s %d/%d files encoded\n%.0f%% done", m.Spinner.View(), m.FileCount-len(m.Files), m.FileCount, m.Progress)
-	} else {
-		return fmt.Sprintf("%s %d file\n%.0f%% done", m.Spinner.View(), m.FileCount, m.Progress)
+	if m.Quitting {
+		return fmt.Sprintf("%s %d/%d files encoded\n", checkmark, m.FileCount-len(m.Files), m.FileCount)
 	}
+
+	return fmt.Sprintf("%s %d/%d files encoded\n%.0f%% done", m.Spinner.View(), m.FileCount-len(m.Files), m.FileCount, m.Progress)
 }
 
 type initUi struct {
@@ -126,7 +137,12 @@ type finishedEncodingVideo struct{}
 type updateProgress struct {
 	progress float64
 }
+type quitMsg struct{}
 
 func encodeVideo() tea.Msg {
 	return encodeVideoMsg{}
+}
+
+func (m model) gracefullyQuit() tea.Msg {
+	return quitMsg{}
 }
