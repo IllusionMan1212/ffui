@@ -109,6 +109,10 @@ func (m *model) statFile() tea.Msg {
 		for _, entry := range entries {
 			fullFilePath := filepath.Join(m.Path, entry.Name())
 
+			if entry.IsDir() {
+				continue
+			}
+
 			mType, err := mimetype.DetectFile(fullFilePath)
 			if err != nil {
 				log.Fatal(err)
