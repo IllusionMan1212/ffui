@@ -74,7 +74,7 @@ func TempSock(totalDuration float64, teaP *tea.Program) string {
 				progressFloat, err := strconv.ParseFloat(progress, 64)
 				if err == nil {
 					teaP.Send(updateProgress{
-						progress: progressFloat * 100,
+						progress: progressFloat,
 					})
 				}
 			}

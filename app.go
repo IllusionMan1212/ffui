@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -16,15 +17,18 @@ import (
 var checkmark = lipgloss.NewStyle().Foreground(lipgloss.Color("#22FF33")).Render("✔")
 
 type model struct {
-	IsDirectory     bool
-	Path            string
-	CurrentFileName string
-	FileCount       int
-	Files           []string
-	Spinner         spinner.Model
-	Progress        float64
-	Program         *tea.Program
-	Quitting        bool
+	IsDirectory           bool
+	Path                  string
+	CurrentFileName       string
+	FileCount             int
+	Files                 []string
+	Spinner               spinner.Model
+	SingleFileProgressBar progress.Model
+	SingleFileProgress    float64
+	TotalProgressBar      progress.Model
+	TotalProgress         float64
+	Program               *tea.Program
+	Quitting              bool
 }
 
 func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
@@ -33,14 +37,17 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
 	return &model{
-		IsDirectory:     fileInfo.IsDir(),
-		CurrentFileName: fileInfo.Name(),
-		Path:            absolutePath,
-		FileCount:       0,
-		Files:           make([]string, 0),
-		Spinner:         s,
-		Progress:        0.0,
-		Quitting:        false,
+		IsDirectory:           fileInfo.IsDir(),
+		CurrentFileName:       fileInfo.Name(),
+		Path:                  absolutePath,
+		FileCount:             0,
+		Files:                 make([]string, 0),
+		Spinner:               s,
+		SingleFileProgressBar: progress.New(progress.WithGradient("#1010ff", "#00ff00")),
+		SingleFileProgress:    0.0,
+		TotalProgressBar:      progress.New(progress.WithDefaultGradient()),
+		TotalProgress:         0.0,
+		Quitting:              false,
 	}
 }
 
@@ -63,6 +70,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, encodeVideo
 	case encodeVideoMsg:
+		m.CurrentFileName = filepath.Base(m.Files[len(m.Files)-1])
+
 		go func() {
 			fullFilePath := m.Files[len(m.Files)-1]
 			encode(fullFilePath, filepath.Base(fullFilePath), m.Program)
@@ -78,11 +87,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, encodeVideo
 	case updateProgress:
-		m.Progress = msg.progress
-		return m, nil
+		m.SingleFileProgress = msg.progress
+		m.TotalProgress = (1.0/float64(m.FileCount))*msg.progress + (1.0 / float64(m.FileCount) * float64(m.FileCount-len(m.Files)))
+
+		singleProgressCmd := m.SingleFileProgressBar.SetPercent(msg.progress)
+		totalProgressCmd := m.TotalProgressBar.SetPercent(m.TotalProgress)
+
+		return m, tea.Batch(singleProgressCmd, totalProgressCmd)
 	case quitMsg:
 		m.Quitting = true
 		return m, tea.Quit
+	case progress.FrameMsg:
+		singleProgressModel, singleProgressCmd := m.SingleFileProgressBar.Update(msg)
+		m.SingleFileProgressBar = singleProgressModel.(progress.Model)
+
+		totalProgressModel, totalProgressCmd := m.TotalProgressBar.Update(msg)
+		m.TotalProgressBar = totalProgressModel.(progress.Model)
+
+		return m, tea.Batch(singleProgressCmd, totalProgressCmd)
 	}
 
 	m.Spinner, cmd = m.Spinner.Update(msg)
@@ -95,7 +117,17 @@ func (m model) View() string {
 		return fmt.Sprintf("%s %d/%d files encoded\n", checkmark, m.FileCount-len(m.Files), m.FileCount)
 	}
 
-	return fmt.Sprintf("%s %d/%d files encoded\n%.0f%% done", m.Spinner.View(), m.FileCount-len(m.Files), m.FileCount, m.Progress)
+	progress := ""
+
+	if m.IsDirectory {
+		progress = fmt.Sprintf("%s %d/%d files encoded\nFile Progress: %s\n\nTotal Progress: %s", m.Spinner.View(), m.FileCount-len(m.Files), m.FileCount, m.SingleFileProgressBar.View(), m.TotalProgressBar.View())
+	} else {
+		progress = fmt.Sprintf("%s %d/%d files encoded\n%s", m.Spinner.View(), m.FileCount-len(m.Files), m.FileCount, m.SingleFileProgressBar.View())
+	}
+
+	view := fmt.Sprintf("\nEncoding \"%s\"...\n%s", m.CurrentFileName, progress)
+
+	return view
 }
 
 type initUi struct {
