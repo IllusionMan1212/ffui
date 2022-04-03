@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/progress"
@@ -138,6 +139,9 @@ type initUi struct {
 func (m *model) statFile() tea.Msg {
 	if m.IsDirectory {
 		entries, _ := os.ReadDir(m.Path)
+
+		sort.Sort(DirEntrySlice(entries))
+
 		for _, entry := range entries {
 			fullFilePath := filepath.Join(m.Path, entry.Name())
 
