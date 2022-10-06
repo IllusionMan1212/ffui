@@ -121,9 +121,18 @@ func (m model) View() string {
 	progress := ""
 
 	if m.IsDirectory {
-		progress = fmt.Sprintf("%s %d/%d files encoded\nFile Progress: %s\n\nTotal Progress: %s", m.Spinner.View(), m.FileCount-len(m.Files), m.FileCount, m.SingleFileProgressBar.View(), m.TotalProgressBar.View())
+		progress = fmt.Sprintf("%s %d/%d files encoded\nFile Progress: %s\n\nTotal Progress: %s",
+			m.Spinner.View(),
+			m.FileCount-len(m.Files),
+			m.FileCount,
+			m.SingleFileProgressBar.View(),
+			m.TotalProgressBar.View())
 	} else {
-		progress = fmt.Sprintf("%s %d/%d files encoded\n%s", m.Spinner.View(), m.FileCount-len(m.Files), m.FileCount, m.SingleFileProgressBar.View())
+		progress = fmt.Sprintf("%s %d/%d files encoded\n%s",
+			m.Spinner.View(),
+			m.FileCount-len(m.Files),
+			m.FileCount,
+			m.SingleFileProgressBar.View())
 	}
 
 	view := fmt.Sprintf("\nEncoding \"%s\"...\n%s", m.CurrentFileName, progress)
