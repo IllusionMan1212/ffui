@@ -31,4 +31,22 @@ var (
 
 	FocusedOption = lipgloss.NewStyle().
 			Foreground(SecondaryColor)
+
+	FocusedButton = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(AccentColor).
+			Foreground(AccentColor).
+			MarginTop(1).
+			Padding(0, 2).
+			Align(lipgloss.Center).
+			Bold(true).
+			Render("Start Encoding!")
+	BlurredButton = lipgloss.NewStyle().
+			Border(lipgloss.NormalBorder()).
+			BorderForeground(PrimaryColor).
+			Foreground(PrimaryColor).
+			MarginTop(1).
+			Padding(0, 2).
+			Align(lipgloss.Center).
+			Render("Start Encoding!")
 )

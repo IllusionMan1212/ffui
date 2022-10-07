@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -52,7 +53,7 @@ func main() {
 	}
 }
 
-func encode(fullFilePath string, fileName string, teaP *tea.Program) {
+func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedConfig) {
 	mType, err := mimetype.DetectFile(fullFilePath)
 	if err != nil {
 		log.Fatal(err)
@@ -66,15 +67,29 @@ func encode(fullFilePath string, fileName string, teaP *tea.Program) {
 	extensionIndex := strings.LastIndex(fileName, ".")
 	newFileName := fileName[:extensionIndex]
 	extension := fileName[extensionIndex:]
-	newFileFullPath := filepath.Join(parentDir, newFileName+" [x265]"+extension)
+	newFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf(" [%s] [%s]", cfg.VideoEncoder, cfg.AudioEncoder)+extension)
+
+	if _, err := os.Stat(newFileFullPath); err == nil {
+		if cfg.SkipEncodedVid {
+			log.Printf("%s already exists with the exact same encodings (crf and preset might be different though), skipping.", newFileFullPath)
+			teaP.Send(finishedEncodingVideo{})
+			return
+		} else {
+			os.Remove(newFileFullPath)
+		}
+	}
 
 	err = ffmpeg.Input(fullFilePath).
 		Output(newFileFullPath, ffmpeg.KwArgs{
-			"c:v":    "libx265",
-			"crf":    "30",
-			"preset": "fast",
-			"c:a":    "aac",
+			"c:v":    cfg.VideoEncoder,
+			"crf":    cfg.CRF,
+			"preset": cfg.Preset,
+			"c:a":    cfg.AudioEncoder,
 			"b:a":    "128k"}).
 		GlobalArgs("-progress", "unix://"+getProgressSocket(fullFilePath, teaP)).
 		Run()
+
+	if err != nil {
+		teaP.Send(errQuitMsg{msg: fmt.Sprintf("FFmpeg quit with error: %s", err)})
+	}
 }

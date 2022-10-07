@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
@@ -73,4 +74,45 @@ type initCfgMsg struct{}
 
 func initCfg() tea.Msg {
 	return initCfgMsg{}
+}
+
+type parsedCfgMsg struct {
+	parsedConfig ParsedConfig
+}
+
+func (m *model) parseConfig() tea.Msg {
+	vEncoder := find(m.Config, "Video Encoder")
+	aEncoder := find(m.Config, "Audio Encoder")
+	preset := find(m.Config, "Preset (libx264 & libx265 only)")
+	crf := find(m.Config, "Constant Rate Factor (CRF)")
+
+	return parsedCfgMsg{
+		parsedConfig: ParsedConfig{
+			DeleteOldVideo: find(m.Config, "Delete old video(s)?").FocusedOption != 0,
+			SkipEncodedVid: find(m.Config, "What should we do about encoded videos?").FocusedOption == 0,
+			VideoEncoder:   vEncoder.Opts[vEncoder.FocusedOption],
+			AudioEncoder:   aEncoder.Opts[aEncoder.FocusedOption],
+			Preset:         preset.Opts[preset.FocusedOption],
+			CRF:            crf.Opts[crf.FocusedOption],
+		},
+	}
+}
+
+type errQuitMsg struct {
+	msg string
+}
+
+func (m *model) cleanUp() tea.Msg {
+	fullFilePath := m.Files[len(m.Files)-1]
+	fileName := filepath.Base(fullFilePath)
+
+	parentDir := filepath.Dir(fullFilePath)
+	extensionIndex := strings.LastIndex(fileName, ".")
+	newFileName := fileName[:extensionIndex]
+	extension := fileName[extensionIndex:]
+	newFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf(" [%s] [%s]", m.ParsedConfig.VideoEncoder, m.ParsedConfig.AudioEncoder)+extension)
+
+	os.Remove(newFileFullPath)
+
+	return tea.Quit()
 }

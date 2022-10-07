@@ -12,29 +12,14 @@ import (
 )
 
 type Screen int
-type FfuiBool int
 
 var checkmark = lipgloss.NewStyle().Foreground(lipgloss.Color("#22FF33")).Render("✔")
-
-var Configs = []Config{
-	{Name: "Delete unencoded video(s)?", Opts: []string{"No", "Yes"}},
-}
+var x = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF2233")).Render("✖️")
 
 const (
 	Cfg Screen = iota
 	Main
 )
-
-const (
-	False FfuiBool = iota
-	True
-)
-
-type Config struct {
-	Name          string
-	Opts          []string
-	FocusedOption int
-}
 
 type model struct {
 	IsDirectory           bool
@@ -52,6 +37,9 @@ type model struct {
 	Screen                Screen
 	Config                map[int]Config
 	FocusIndex            int
+	ParsedConfig          ParsedConfig
+	ErrQuit               bool
+	ErrQuitMessage        string
 }
 
 func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
@@ -78,6 +66,8 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
 		TotalProgress:         0.0,
 		Quitting:              false,
 		Config:                cfg,
+		ErrQuit:               false,
+		ErrQuitMessage:        "",
 	}
 }
 
@@ -94,6 +84,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "ctrl+c":
 			return m, tea.Quit
 		}
+	case errQuitMsg:
+		m.ErrQuitMessage = msg.msg
+		m.ErrQuit = true
+		return m, m.cleanUp
 	}
 
 	switch m.Screen {
@@ -103,10 +97,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			key := msg.String()
 			switch key {
 			case "enter", " ":
-				// switch to main screen if we're focused on the start button
+				// parse config and switch to main screen if we're focused on the start button
 				if m.FocusIndex == len(Configs) {
-					m.Screen = Main
-					return m, tea.Batch(m.Spinner.Tick, m.statFile)
+					return m, m.parseConfig
 				}
 			case "tab", "shift+tab", "up", "down":
 				if key == "up" || key == "shift+tab" {
@@ -115,14 +108,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.FocusIndex++
 				}
 
-				// TODO: make this len(Configs) + 1 after start button is added and change the else statement accordingly
-				if m.FocusIndex >= len(Configs) {
+				if m.FocusIndex >= len(Configs)+1 {
 					m.FocusIndex = 0
 				} else if m.FocusIndex < 0 {
-					m.FocusIndex = len(Configs) - 1
+					m.FocusIndex = len(Configs)
 				}
-
-				// TODO: move to start button
 			case "left", "right":
 				if cfg, ok := m.Config[m.FocusIndex]; ok {
 					if key == "right" {
@@ -140,6 +130,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.Config[m.FocusIndex] = cfg
 				}
 			}
+		case parsedCfgMsg:
+			m.Screen = Main
+			m.ParsedConfig = msg.parsedConfig
+			return m, tea.Batch(m.Spinner.Tick, m.statFile)
 		}
 	case Main:
 		switch msg := msg.(type) {
@@ -153,11 +147,16 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 			go func() {
 				fullFilePath := m.Files[len(m.Files)-1]
-				encode(fullFilePath, filepath.Base(fullFilePath), m.Program)
+				encode(fullFilePath, filepath.Base(fullFilePath), m.Program, m.ParsedConfig)
 			}()
 
 			return m, nil
 		case finishedEncodingVideo:
+			if m.ParsedConfig.DeleteOldVideo {
+				m.CurrentFileName = fmt.Sprintf("Deleting: %s", filepath.Base(m.Files[len(m.Files)-1]))
+				os.Remove(m.Files[len(m.Files)-1])
+			}
+
 			m.Files = m.Files[:len(m.Files)-1]
 
 			if len(m.Files) == 0 {
@@ -217,7 +216,13 @@ func CfgScreenView(m model) string {
 		}
 	}
 
-	// TODO: add start button
+	if m.FocusIndex == len(Configs) {
+		view += FocusedButton
+	} else {
+		view += BlurredButton
+	}
+
+	view += "\n"
 
 	return view
 }
@@ -248,6 +253,10 @@ func MainScreenView(m model) string {
 func (m model) View() string {
 	if m.Quitting {
 		return fmt.Sprintf("%s %d/%d files encoded\n", checkmark, m.FileCount-len(m.Files), m.FileCount)
+	}
+
+	if m.ErrQuit {
+		return fmt.Sprintf("%s %s\n", x, m.ErrQuitMessage)
 	}
 
 	switch m.Screen {
