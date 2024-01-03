@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 type Screen int
@@ -38,6 +40,7 @@ type model struct {
 	Config                map[int]Config
 	FocusIndex            int
 	ParsedConfig          ParsedConfig
+	DryRun                bool
 	ErrQuit               bool
 	ErrQuitMessage        string
 }
@@ -99,7 +102,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter", " ":
 				// parse config and switch to main screen if we're focused on the start button
 				if m.FocusIndex == len(Configs) {
-					return m, m.parseConfig
+					return m, m.parseConfig(false)
+				}
+				// parse config, print it and exit
+				if m.FocusIndex == len(Configs)+1 {
+					return m, m.parseConfig(true)
 				}
 			case "tab", "shift+tab", "up", "down":
 				if key == "up" || key == "shift+tab" {
@@ -108,10 +115,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.FocusIndex++
 				}
 
-				if m.FocusIndex >= len(Configs)+1 {
+				if m.FocusIndex >= len(Configs)+2 {
 					m.FocusIndex = 0
 				} else if m.FocusIndex < 0 {
-					m.FocusIndex = len(Configs)
+					m.FocusIndex = len(Configs) + 1
 				}
 			case "left", "right":
 				if cfg, ok := m.Config[m.FocusIndex]; ok {
@@ -130,6 +137,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.Config[m.FocusIndex] = cfg
 				}
 			}
+		case quitMsg:
+			m.Quitting = true
+			return m, tea.Quit
 		case parsedCfgMsg:
 			m.Screen = Main
 			m.ParsedConfig = msg.parsedConfig
@@ -140,6 +150,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case initUi:
 			m.FileCount = msg.fileCount
 			m.Files = msg.files
+
+			if m.DryRun {
+				return m, gracefullyQuit
+			}
 
 			return m, encodeVideo
 		case encodeVideoMsg:
@@ -160,7 +174,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Files = m.Files[:len(m.Files)-1]
 
 			if len(m.Files) == 0 {
-				return m, m.gracefullyQuit
+				return m, gracefullyQuit
 			}
 
 			return m, encodeVideo
@@ -217,9 +231,15 @@ func CfgScreenView(m model) string {
 	}
 
 	if m.FocusIndex == len(Configs) {
-		view += FocusedButton
+		view += FocusedStartButton
 	} else {
-		view += BlurredButton
+		view += BlurredStartButton
+	}
+
+	if m.FocusIndex == len(Configs)+1 {
+		view += FocusedDryRunButton
+	} else {
+		view += BlurredDryRunButton
 	}
 
 	view += "\n"
@@ -252,7 +272,25 @@ func MainScreenView(m model) string {
 
 func (m model) View() string {
 	if m.Quitting {
-		return fmt.Sprintf("%s %d/%d files encoded\n", checkmark, m.FileCount-len(m.Files), m.FileCount)
+		if m.DryRun {
+			fullFilePath := m.Files[len(m.Files)-1]
+			fileName := filepath.Base(fullFilePath)
+			extensionIndex := strings.LastIndex(fileName, ".")
+			extension := fileName[extensionIndex:]
+			newFullFilePath := "./test-out" + extension
+
+			cli := ffmpeg.Input(fullFilePath).Output(newFullFilePath, ffmpeg.KwArgs{
+				"c:v":    m.ParsedConfig.VideoEncoder,
+				"crf":    m.ParsedConfig.CRF,
+				"preset": m.ParsedConfig.Preset,
+				"c:a":    m.ParsedConfig.AudioEncoder,
+				"b:a":    "128k"}).
+				Compile()
+
+			return fmt.Sprintf("%s %s\n", checkmark, strings.Join(cli.Args, " "))
+		} else {
+			return fmt.Sprintf("%s %d/%d files encoded\n", checkmark, m.FileCount-len(m.Files), m.FileCount)
+		}
 	}
 
 	if m.ErrQuit {

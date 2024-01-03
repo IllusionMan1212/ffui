@@ -7,5 +7,5 @@ require (
 	github.com/charmbracelet/bubbletea v0.20.0
 	github.com/charmbracelet/lipgloss v0.5.0
 	github.com/gabriel-vasile/mimetype v1.4.0
-	github.com/u2takey/ffmpeg-go v0.4.1
+	github.com/u2takey/ffmpeg-go v0.5.0
 )

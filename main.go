@@ -79,8 +79,11 @@ func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedC
 		}
 	}
 
-	err = ffmpeg.Input(fullFilePath).
-		Output(newFileFullPath, ffmpeg.KwArgs{
+	quotedFilePath := fmt.Sprintf("\"%s\"", fullFilePath)
+	quotedNewFilePath := fmt.Sprintf("\"%s\"", newFileFullPath)
+
+	err = ffmpeg.Input(quotedFilePath).
+		Output(quotedNewFilePath, ffmpeg.KwArgs{
 			"c:v":    cfg.VideoEncoder,
 			"crf":    cfg.CRF,
 			"preset": cfg.Preset,

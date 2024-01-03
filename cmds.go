@@ -66,7 +66,7 @@ func encodeVideo() tea.Msg {
 
 type quitMsg struct{}
 
-func (m model) gracefullyQuit() tea.Msg {
+func gracefullyQuit() tea.Msg {
 	return quitMsg{}
 }
 
@@ -78,23 +78,29 @@ func initCfg() tea.Msg {
 
 type parsedCfgMsg struct {
 	parsedConfig ParsedConfig
+	dryRun       bool
 }
 
-func (m *model) parseConfig() tea.Msg {
-	vEncoder := find(m.Config, "Video Encoder")
-	aEncoder := find(m.Config, "Audio Encoder")
-	preset := find(m.Config, "Preset (libx264 & libx265 only)")
-	crf := find(m.Config, "Constant Rate Factor (CRF)")
+func (m *model) parseConfig(dryRun bool) tea.Cmd {
+	m.DryRun = dryRun
 
-	return parsedCfgMsg{
-		parsedConfig: ParsedConfig{
-			DeleteOldVideo: find(m.Config, "Delete old video(s)?").FocusedOption != 0,
-			SkipEncodedVid: find(m.Config, "What should we do about encoded videos?").FocusedOption == 0,
-			VideoEncoder:   vEncoder.Opts[vEncoder.FocusedOption],
-			AudioEncoder:   aEncoder.Opts[aEncoder.FocusedOption],
-			Preset:         preset.Opts[preset.FocusedOption],
-			CRF:            crf.Opts[crf.FocusedOption],
-		},
+	return func() tea.Msg {
+		vEncoder := find(m.Config, "Video Encoder")
+		aEncoder := find(m.Config, "Audio Encoder")
+		preset := find(m.Config, "Preset (libx264 & libx265 only)")
+		crf := find(m.Config, "Constant Rate Factor (CRF)")
+
+		return parsedCfgMsg{
+			parsedConfig: ParsedConfig{
+				DeleteOldVideo: find(m.Config, "Delete old video(s)?").FocusedOption != 0,
+				SkipEncodedVid: find(m.Config, "What should we do about encoded videos?").FocusedOption == 0,
+				VideoEncoder:   vEncoder.Opts[vEncoder.FocusedOption],
+				AudioEncoder:   aEncoder.Opts[aEncoder.FocusedOption],
+				Preset:         preset.Opts[preset.FocusedOption],
+				CRF:            crf.Opts[crf.FocusedOption],
+			},
+			dryRun: dryRun,
+		}
 	}
 }
 
