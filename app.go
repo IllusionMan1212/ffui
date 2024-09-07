@@ -34,6 +34,7 @@ type model struct {
 	SingleFileProgress    float64
 	TotalProgressBar      progress.Model
 	TotalProgress         float64
+	Estimate              int
 	Program               *tea.Program
 	Quitting              bool
 	Screen                Screen
@@ -186,6 +187,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			totalProgressCmd := m.TotalProgressBar.SetPercent(m.TotalProgress)
 
 			return m, tea.Batch(singleProgressCmd, totalProgressCmd)
+		case updateEstimate:
+			m.Estimate = msg.estimate
+
+			return m, tea.Batch()
 		case quitMsg:
 			m.Quitting = true
 			return m, tea.Quit
@@ -265,9 +270,32 @@ func MainScreenView(m model) string {
 			m.SingleFileProgressBar.View())
 	}
 
-	view := fmt.Sprintf("\nEncoding \"%s\"...\n%s", m.CurrentFileName, progress)
+	eta := formatEstimate(m.Estimate)
+
+	view := fmt.Sprintf("\nEncoding \"%s\"... ETA: %s\n%s", m.CurrentFileName, eta, progress)
 
 	return view
+}
+
+func formatEstimate(estimate int) string {
+	if estimate >= 86400 {
+		day := estimate / 86400
+		hour := (estimate % 86400) / 3600
+		min := (estimate % 3600) / 60
+		sec := estimate % 60
+		return fmt.Sprintf("%dd%dh%dm%ds", day, hour, min, sec)
+	} else if estimate >= 3600 {
+		hour := estimate / 3600
+		min := (estimate % 3600) / 60
+		sec := estimate % 60
+		return fmt.Sprintf("%dh%dm%ds", hour, min, sec)
+	} else if estimate >= 60 {
+		min := estimate / 60
+		sec := estimate % 60
+		return fmt.Sprintf("%dm%ds", min, sec)
+	}
+
+	return fmt.Sprintf("%ds", estimate)
 }
 
 func (m model) View() string {

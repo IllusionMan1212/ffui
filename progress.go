@@ -42,6 +42,8 @@ func TempSock(totalDuration float64, teaP *tea.Program) string {
 
 	go func() {
 		re := regexp.MustCompile(`out_time_ms=(\d+)`)
+		speedRe := regexp.MustCompile(`speed=(\d+\.\d+x)`)
+
 		fd, err := l.Accept()
 		if err != nil {
 			log.Fatal("accept error:", err)
@@ -49,6 +51,8 @@ func TempSock(totalDuration float64, teaP *tea.Program) string {
 		buf := make([]byte, 1024)
 		data := ""
 		progress := ""
+		estimate := 0
+
 		for {
 			_, err := fd.Read(buf)
 			if err != nil {
@@ -78,6 +82,19 @@ func TempSock(totalDuration float64, teaP *tea.Program) string {
 					})
 				}
 			}
+
+			speedMatch := speedRe.FindString(data)
+			if len(speedMatch) > 0 {
+				trimmedSpeed := strings.TrimSuffix(strings.Split(speedMatch, "=")[1], "x")
+				speed, _ := strconv.ParseFloat(trimmedSpeed, 32)
+				progressFloat, _ := strconv.ParseFloat(progress, 64)
+				remainingDuration := totalDuration - (totalDuration * progressFloat)
+				estimate = int(remainingDuration / speed)
+			}
+
+			teaP.Send(updateEstimate{
+				estimate: estimate,
+			})
 		}
 	}()
 

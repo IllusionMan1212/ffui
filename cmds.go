@@ -16,6 +16,9 @@ type finishedEncodingVideo struct{}
 type updateProgress struct {
 	progress float64
 }
+type updateEstimate struct {
+	estimate int
+}
 
 type initUi struct {
 	fileCount int
