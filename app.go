@@ -189,8 +189,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Batch(singleProgressCmd, totalProgressCmd)
 		case updateEstimate:
 			m.Estimate = msg.estimate
-
-			return m, tea.Batch()
 		case quitMsg:
 			m.Quitting = true
 			return m, tea.Quit
