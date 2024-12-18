@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -10,7 +11,6 @@ import (
 	"github.com/charmbracelet/bubbles/spinner"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 type Screen int
@@ -85,7 +85,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c":
+		case "ctrl+c", "esc":
+			// TODO: cancel the ffmpeg command context to terminate the process
 			return m, tea.Quit
 		}
 	case errQuitMsg:
@@ -300,20 +301,16 @@ func (m model) View() string {
 	if m.Quitting {
 		if m.DryRun {
 			fullFilePath := m.Files[len(m.Files)-1]
+			parentDir := filepath.Dir(fullFilePath)
 			fileName := filepath.Base(fullFilePath)
 			extensionIndex := strings.LastIndex(fileName, ".")
+			newFileName := fileName[:extensionIndex]
 			extension := fileName[extensionIndex:]
-			newFullFilePath := "./test-out" + extension
+			outFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf("_[%s]_[%s]", m.ParsedConfig.VideoEncoder, m.ParsedConfig.AudioEncoder)+extension)
 
-			cli := ffmpeg.Input(fullFilePath).Output(newFullFilePath, ffmpeg.KwArgs{
-				"c:v":    m.ParsedConfig.VideoEncoder,
-				"crf":    m.ParsedConfig.CRF,
-				"preset": m.ParsedConfig.Preset,
-				"c:a":    m.ParsedConfig.AudioEncoder,
-				"b:a":    "128k"}).
-				Compile()
+			cmd := exec.Command("ffmpeg", buildFFmpegCmdArgs(fullFilePath, outFileFullPath, m.ParsedConfig)...)
 
-			return fmt.Sprintf("%s %s\n", checkmark, strings.Join(cli.Args, " "))
+			return fmt.Sprintf("%s %s\n", checkmark, cmd.String())
 		} else {
 			return fmt.Sprintf("%s %d/%d files encoded\n", checkmark, m.FileCount-len(m.Files), m.FileCount)
 		}

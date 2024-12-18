@@ -7,22 +7,22 @@ import (
 	"math/rand"
 	"net"
 	"os"
+	"os/exec"
 	"path"
 	"regexp"
 	"strconv"
 	"strings"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 func getProgressSocket(inFileName string, teaP *tea.Program) string {
-	a, err := ffmpeg.Probe(inFileName)
+	cmd := exec.Command("ffprobe", "-show_format", "-show_streams", "-of", "json", inFileName)
+	probe, err := cmd.Output()
 	if err != nil {
 		panic(err)
 	}
-	totalDuration, err := probeDuration(a)
+	totalDuration, err := probeDuration(string(probe))
 	if err != nil {
 		panic(err)
 	}
@@ -33,7 +33,6 @@ func getProgressSocket(inFileName string, teaP *tea.Program) string {
 func TempSock(totalDuration float64, teaP *tea.Program) string {
 	// serve
 
-	rand.Seed(time.Now().Unix())
 	sockFileName := path.Join(os.TempDir(), fmt.Sprintf("%d_sock", rand.Int()))
 	l, err := net.Listen("unix", sockFileName)
 	if err != nil {

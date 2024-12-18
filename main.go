@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/gabriel-vasile/mimetype"
-	ffmpeg "github.com/u2takey/ffmpeg-go"
 )
 
 func main() {
@@ -53,6 +53,55 @@ func main() {
 	}
 }
 
+func buildFFmpegCmdArgs(fullFilePath string, outFullFilePath string, cfg ParsedConfig, additionalArgs ...string) []string {
+	args := make([]string, 0, 10)
+	// Input file
+	args = append(args, "-i")
+	args = append(args, fullFilePath)
+
+	// Encoding parameters
+	args = append(args, "-c:v")
+	args = append(args, cfg.VideoEncoder)
+
+	switch cfg.VideoEncoder {
+	case "copy":
+		// No options
+	case "libx264", "libx265":
+		args = append(args, "-crf")
+		args = append(args, cfg.CRF)
+
+		args = append(args, "-preset")
+		args = append(args, cfg.Preset)
+	case "libvpx-vp9":
+		args = append(args, "-crf")
+		args = append(args, cfg.CRF)
+	case "librav1e":
+		// No options
+	case "libsvtav1":
+		args = append(args, "-crf")
+		args = append(args, cfg.CRF)
+
+		// TODO: preset is a number for this encoder (-2 to 13)
+	}
+
+	switch cfg.AudioEncoder {
+	case "None":
+		args = append(args, "-an")
+	case "copy", "aac", "libopus":
+		args = append(args, "-c:a")
+		args = append(args, cfg.AudioEncoder)
+	}
+
+	for _, arg := range additionalArgs {
+		args = append(args, arg)
+	}
+
+	// Output file
+	args = append(args, outFullFilePath)
+
+	return args
+}
+
 func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedConfig) {
 	mType, err := mimetype.DetectFile(fullFilePath)
 	if err != nil {
@@ -67,7 +116,7 @@ func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedC
 	extensionIndex := strings.LastIndex(fileName, ".")
 	newFileName := fileName[:extensionIndex]
 	extension := fileName[extensionIndex:]
-	newFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf(" [%s] [%s]", cfg.VideoEncoder, cfg.AudioEncoder)+extension)
+	newFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf("_[%s]_[%s]", cfg.VideoEncoder, cfg.AudioEncoder)+extension)
 
 	if _, err := os.Stat(newFileFullPath); err == nil {
 		if cfg.SkipEncodedVid {
@@ -79,17 +128,13 @@ func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedC
 		}
 	}
 
-	err = ffmpeg.Input(fullFilePath).
-		Output(newFileFullPath, ffmpeg.KwArgs{
-			"c:v":    cfg.VideoEncoder,
-			"crf":    cfg.CRF,
-			"preset": cfg.Preset,
-			"c:a":    cfg.AudioEncoder,
-			"b:a":    "128k"}).
-		GlobalArgs("-progress", "unix://"+getProgressSocket(fullFilePath, teaP)).
-		Run()
+	cmdArgs := buildFFmpegCmdArgs(fullFilePath, newFileFullPath, cfg, "-progress", "unix://"+getProgressSocket(fullFilePath, teaP))
+	cmd := exec.Command("ffmpeg", cmdArgs...)
+	// TODO: send the cmd obj as a tea msg so we can send interrupt signals to the process when ctrl+c is pressed
+	//teaP.Send()
+	err = cmd.Run()
 
 	if err != nil {
-		teaP.Send(errQuitMsg{msg: fmt.Sprintf("FFmpeg quit with error: %s", err)})
+		teaP.Send(errQuitMsg{msg: fmt.Sprintf("FFmpeg exited with error code: %s\n\nError: %v", err, cmd.Stderr)})
 	}
 }
