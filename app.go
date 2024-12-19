@@ -41,7 +41,8 @@ type model struct {
 	Quitting              bool
 	Cancelled             bool
 	Screen                Screen
-	Config                map[int]Config
+	Config                []Config
+	VisibleConfig         []Config
 	FocusIndex            int
 	ParsedConfig          ParsedConfig
 	DryRun                bool
@@ -53,12 +54,6 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-
-	cfg := make(map[int]Config)
-
-	for i := 0; i < len(Configs); i++ {
-		cfg[i] = Configs[i]
-	}
 
 	return &model{
 		IsDirectory:           fileInfo.IsDir(),
@@ -72,9 +67,20 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
 		TotalProgressBar:      progress.New(progress.WithDefaultGradient()),
 		TotalProgress:         0.0,
 		Quitting:              false,
-		Config:                cfg,
+		Config:                Configs,
+		VisibleConfig:         getVisibleConfigs(Configs),
 		ErrQuit:               false,
 		ErrQuitMessage:        "",
+	}
+}
+
+func (m model) updateConfigFocusedOptions() {
+	for _, visCfg := range m.VisibleConfig {
+		for i := range m.Config {
+			if m.Config[i].Name == visCfg.Name {
+				m.Config[i].FocusedOption = visCfg.FocusedOption
+			}
+		}
 	}
 }
 
@@ -102,28 +108,34 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 			case "enter", " ":
 				// parse config and switch to main screen if we're focused on the start button
-				if m.FocusIndex == len(Configs) {
+				if m.FocusIndex == len(m.VisibleConfig) {
 					return m, m.parseConfig(false)
 				}
 				// parse config, print it and exit
-				if m.FocusIndex == len(Configs)+1 {
+				if m.FocusIndex == len(m.VisibleConfig)+1 {
 					return m, m.parseConfig(true)
 				}
-			case "tab", "shift+tab", "up", "down":
-				if key == "up" || key == "shift+tab" {
+			case "g":
+				m.FocusIndex = 0
+			case "G":
+				m.FocusIndex = len(m.VisibleConfig) + 1
+			case "tab", "shift+tab", "up", "down", "j", "k":
+				if key == "up" || key == "shift+tab" || key == "k" {
 					m.FocusIndex--
 				} else {
 					m.FocusIndex++
 				}
 
-				if m.FocusIndex >= len(Configs)+2 {
+				if m.FocusIndex >= len(m.VisibleConfig)+2 {
 					m.FocusIndex = 0
 				} else if m.FocusIndex < 0 {
-					m.FocusIndex = len(Configs) + 1
+					m.FocusIndex = len(m.VisibleConfig) + 1
 				}
-			case "left", "right":
-				if cfg, ok := m.Config[m.FocusIndex]; ok {
-					if key == "right" {
+			case "left", "right", "h", "l":
+				// If we're not hovering a button
+				if m.FocusIndex < len(m.VisibleConfig) {
+					cfg := &m.VisibleConfig[m.FocusIndex]
+					if key == "right" || key == "l" {
 						cfg.FocusedOption++
 					} else {
 						cfg.FocusedOption--
@@ -135,7 +147,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						cfg.FocusedOption = len(cfg.Opts) - 1
 					}
 
-					m.Config[m.FocusIndex] = cfg
+					m.updateConfigFocusedOptions()
+					m.VisibleConfig = getVisibleConfigs(m.Config)
 				}
 			}
 		case quitMsg:
@@ -224,7 +237,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func parseConfig(cfg map[int]Config) ParsedConfig {
+func parseConfig(cfg []Config) ParsedConfig {
 	vEncoder := find(cfg, "Video Encoder")
 	aEncoder := find(cfg, "Audio Encoder")
 	preset := find(cfg, "Preset")
@@ -243,24 +256,11 @@ func parseConfig(cfg map[int]Config) ParsedConfig {
 func CfgScreenView(m model) string {
 	view := ""
 
-	config := parseConfig(m.Config)
-
-	for i, cfg := range Configs {
-		switch config.VideoEncoder {
-		case "copy", "librav1e":
-			if cfg.Name == "Preset" || cfg.Name == "Constant Rate Factor (CRF)" {
-				continue
-			}
-		case "libvpx-vp9", "libsvtav1":
-			if cfg.Name == "Preset" {
-				continue
-			}
-		}
-
+	for i, cfg := range m.VisibleConfig {
 		opts := ""
 
 		for j, opt := range cfg.Opts {
-			if m.Config[i].FocusedOption == j {
+			if m.VisibleConfig[i].FocusedOption == j {
 				opts += FocusedOption.Render(opt)
 			} else {
 				opts += BlurredOption.Render(opt)
@@ -278,13 +278,13 @@ func CfgScreenView(m model) string {
 		}
 	}
 
-	if m.FocusIndex == len(Configs) {
+	if m.FocusIndex == len(m.VisibleConfig) {
 		view += FocusedStartButton
 	} else {
 		view += BlurredStartButton
 	}
 
-	if m.FocusIndex == len(Configs)+1 {
+	if m.FocusIndex == len(m.VisibleConfig)+1 {
 		view += FocusedDryRunButton
 	} else {
 		view += BlurredDryRunButton

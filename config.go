@@ -26,7 +26,7 @@ type ParsedConfig struct {
 	CRF            string
 }
 
-func find(cfgs map[int]Config, name string) Config {
+func find(cfgs []Config, name string) Config {
 	for _, cfg := range cfgs {
 		if cfg.Name == name {
 			return cfg
@@ -35,4 +35,34 @@ func find(cfgs map[int]Config, name string) Config {
 
 	err := fmt.Sprintf("Couldn't find requested cfg: %s", name)
 	panic(err)
+}
+
+func filter(cfgs []Config, names ...string) []Config {
+	filtered := make([]Config, 0)
+
+cfgloop:
+	for _, cfg := range cfgs {
+		for _, name := range names {
+			if cfg.Name == name {
+				continue cfgloop
+			}
+		}
+
+		filtered = append(filtered, cfg)
+	}
+
+	return filtered
+}
+
+func getVisibleConfigs(cfgs []Config) []Config {
+	parsed := parseConfig(cfgs)
+
+	switch parsed.VideoEncoder {
+	case "copy", "librav1e":
+		return filter(cfgs, "Preset", "Constant Rate Factor (CRF)")
+	case "libvpx-vp9", "libsvtav1":
+		return filter(cfgs, "Preset")
+	}
+
+	return cfgs
 }
