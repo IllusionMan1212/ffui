@@ -90,7 +90,7 @@ func (m *model) parseConfig(dryRun bool) tea.Cmd {
 	return func() tea.Msg {
 		vEncoder := find(m.Config, "Video Encoder")
 		aEncoder := find(m.Config, "Audio Encoder")
-		preset := find(m.Config, "Preset (libx264 & libx265 only)")
+		preset := find(m.Config, "Preset")
 		crf := find(m.Config, "Constant Rate Factor (CRF)")
 
 		return parsedCfgMsg{

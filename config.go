@@ -7,7 +7,7 @@ var Configs = []Config{
 	{Name: "What should we do about encoded videos?", Opts: []string{"Skip", "Delete and encode again"}},
 	{Name: "Video Encoder", Opts: []string{"copy", "libx264", "libx265", "libvpx-vp9", "librav1e", "libsvtav1"}},
 	{Name: "Audio Encoder", Opts: []string{"None", "copy", "aac", "libopus"}, FocusedOption: 1},
-	{Name: "Preset (libx264 & libx265 only)", Opts: []string{"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"}, FocusedOption: 4},
+	{Name: "Preset", Opts: []string{"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"}, FocusedOption: 4},
 	{Name: "Constant Rate Factor (CRF)", Opts: []string{"10", "15", "20", "25", "30", "35", "40", "45", "50"}, FocusedOption: 4},
 }
 
