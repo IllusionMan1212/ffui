@@ -224,10 +224,39 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func parseConfig(cfg map[int]Config) ParsedConfig {
+	vEncoder := find(cfg, "Video Encoder")
+	aEncoder := find(cfg, "Audio Encoder")
+	preset := find(cfg, "Preset")
+	crf := find(cfg, "Constant Rate Factor (CRF)")
+
+	return ParsedConfig{
+		DeleteOldVideo: find(cfg, "Delete old video(s)?").FocusedOption != 0,
+		SkipEncodedVid: find(cfg, "What should we do about encoded videos?").FocusedOption == 0,
+		VideoEncoder:   vEncoder.Opts[vEncoder.FocusedOption],
+		AudioEncoder:   aEncoder.Opts[aEncoder.FocusedOption],
+		Preset:         preset.Opts[preset.FocusedOption],
+		CRF:            crf.Opts[crf.FocusedOption],
+	}
+}
+
 func CfgScreenView(m model) string {
 	view := ""
 
+	config := parseConfig(m.Config)
+
 	for i, cfg := range Configs {
+		switch config.VideoEncoder {
+		case "copy", "librav1e":
+			if cfg.Name == "Preset" || cfg.Name == "Constant Rate Factor (CRF)" {
+				continue
+			}
+		case "libvpx-vp9", "libsvtav1":
+			if cfg.Name == "Preset" {
+				continue
+			}
+		}
+
 		opts := ""
 
 		for j, opt := range cfg.Opts {
