@@ -120,7 +120,7 @@ func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedC
 
 	if _, err := os.Stat(newFileFullPath); err == nil {
 		if cfg.SkipEncodedVid {
-			log.Printf("%s already exists with the exact same encodings (crf and preset might be different though), skipping.", newFileFullPath)
+			log.Printf("Skipping \"%s\" because it already exists with the exact same encodings (crf and preset might be different though)", newFileFullPath)
 			teaP.Send(finishedEncodingVideo{})
 			return
 		} else {
@@ -130,8 +130,7 @@ func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedC
 
 	cmdArgs := buildFFmpegCmdArgs(fullFilePath, newFileFullPath, cfg, "-progress", "unix://"+getProgressSocket(fullFilePath, teaP))
 	cmd := exec.Command("ffmpeg", cmdArgs...)
-	// TODO: send the cmd obj as a tea msg so we can send interrupt signals to the process when ctrl+c is pressed
-	//teaP.Send()
+	teaP.Send(ffmpegProcessStart{cmd})
 	err = cmd.Run()
 
 	if err != nil {

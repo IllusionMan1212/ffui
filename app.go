@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -36,7 +37,9 @@ type model struct {
 	TotalProgress         float64
 	Estimate              int
 	Program               *tea.Program
+	Command               *exec.Cmd
 	Quitting              bool
+	Cancelled             bool
 	Screen                Screen
 	Config                map[int]Config
 	FocusIndex            int
@@ -83,12 +86,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "esc":
-			// TODO: cancel the ffmpeg command context to terminate the process
-			return m, tea.Quit
-		}
 	case errQuitMsg:
 		m.ErrQuitMessage = msg.msg
 		m.ErrQuit = true
@@ -101,6 +98,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case tea.KeyMsg:
 			key := msg.String()
 			switch key {
+			case "ctrl+c", "esc":
+				return m, tea.Quit
 			case "enter", " ":
 				// parse config and switch to main screen if we're focused on the start button
 				if m.FocusIndex == len(Configs) {
@@ -149,6 +148,18 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case Main:
 		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			key := msg.String()
+			switch key {
+			case "ctrl+c":
+				m.Cancelled = true
+				err := m.Command.Process.Signal(os.Interrupt)
+				if err != nil {
+					log.Println("An error occurred when sending SIGINT to the ffmpeg process:")
+					log.Println(err)
+				}
+				return m, tea.Quit
+			}
 		case initUi:
 			m.FileCount = msg.fileCount
 			m.Files = msg.files
@@ -166,6 +177,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				encode(fullFilePath, filepath.Base(fullFilePath), m.Program, m.ParsedConfig)
 			}()
 
+			return m, nil
+		case ffmpegProcessStart:
+			log.Printf("Running command: %s\n", msg.cmd.String())
+			m.Command = msg.cmd
 			return m, nil
 		case finishedEncodingVideo:
 			if m.ParsedConfig.DeleteOldVideo {
@@ -300,20 +315,27 @@ func formatEstimate(estimate int) string {
 func (m model) View() string {
 	if m.Quitting {
 		if m.DryRun {
-			fullFilePath := m.Files[len(m.Files)-1]
-			parentDir := filepath.Dir(fullFilePath)
-			fileName := filepath.Base(fullFilePath)
-			extensionIndex := strings.LastIndex(fileName, ".")
-			newFileName := fileName[:extensionIndex]
-			extension := fileName[extensionIndex:]
-			outFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf("_[%s]_[%s]", m.ParsedConfig.VideoEncoder, m.ParsedConfig.AudioEncoder)+extension)
+			sb := strings.Builder{}
+			for _, file := range m.Files {
+				parentDir := filepath.Dir(file)
+				fileName := filepath.Base(file)
+				extensionIndex := strings.LastIndex(fileName, ".")
+				newFileName := fileName[:extensionIndex]
+				extension := fileName[extensionIndex:]
+				outFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf("_[%s]_[%s]", m.ParsedConfig.VideoEncoder, m.ParsedConfig.AudioEncoder)+extension)
 
-			cmd := exec.Command("ffmpeg", buildFFmpegCmdArgs(fullFilePath, outFileFullPath, m.ParsedConfig)...)
+				cmd := exec.Command("ffmpeg", buildFFmpegCmdArgs(file, outFileFullPath, m.ParsedConfig)...)
 
-			return fmt.Sprintf("%s %s\n", checkmark, cmd.String())
+				sb.WriteString(cmd.String())
+				sb.WriteByte('\n')
+			}
+
+			return fmt.Sprintf("%s %s\n", checkmark, sb.String())
 		} else {
 			return fmt.Sprintf("%s %d/%d files encoded\n", checkmark, m.FileCount-len(m.Files), m.FileCount)
 		}
+	} else if m.Cancelled {
+		return fmt.Sprintf("%s Encoding cancelled. Stopped ffmpeg process.\n   Make sure to clean up the created file\n", x)
 	}
 
 	if m.ErrQuit {

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -18,6 +19,10 @@ type updateProgress struct {
 }
 type updateEstimate struct {
 	estimate int
+}
+
+type ffmpegProcessStart struct {
+	cmd *exec.Cmd
 }
 
 type initUi struct {
