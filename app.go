@@ -55,6 +55,14 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
+	codecs, err := exec.Command("ffmpeg", "-encoders").Output()
+	if err != nil {
+		log.Println(err)
+	}
+
+	// TODO: parse the codecs and get the one we care about.
+	log.Println(strings.Split(strings.Split(string(codecs), " ------\n")[1], "\n"))
+
 	return &model{
 		IsDirectory:           fileInfo.IsDir(),
 		CurrentFileName:       fileInfo.Name(),
