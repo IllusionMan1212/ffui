@@ -2,11 +2,25 @@ package main
 
 import "fmt"
 
+var SupportedVideoEncoders = []string{
+	"libx264",
+	"libx265",
+	"libvpx-vp9",
+	"librav1e",
+	"libsvtav1",
+}
+
+var SupportedAudioEncoders = []string{
+	"aac",
+	"libopus",
+	"libvorbis",
+}
+
 var Configs = []Config{
 	{Name: "Delete old video(s)?", Opts: []string{"No", "Yes"}, FocusedOption: 1},
 	{Name: "What should we do about encoded videos?", Opts: []string{"Skip", "Delete and encode again"}},
-	{Name: "Video Encoder", Opts: []string{"copy", "libx264", "libx265", "libvpx-vp9", "librav1e", "libsvtav1"}},
-	{Name: "Audio Encoder", Opts: []string{"None", "copy", "aac", "libopus"}, FocusedOption: 1},
+	{Name: "Video Encoder", Opts: []string{"copy"}},
+	{Name: "Audio Encoder", Opts: []string{"None", "copy"}, FocusedOption: 1},
 	{Name: "Preset", Opts: []string{"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"}, FocusedOption: 4},
 	{Name: "Constant Rate Factor (CRF)", Opts: []string{"10", "15", "20", "25", "30", "35", "40", "45", "50"}, FocusedOption: 4},
 }
@@ -52,6 +66,16 @@ cfgloop:
 	}
 
 	return filtered
+}
+
+func contains[T comparable](slice []T, elem T) bool {
+	for _, e := range slice {
+		if e == elem {
+			return true
+		}
+	}
+
+	return false
 }
 
 func getVisibleConfigs(cfgs []Config) []Config {

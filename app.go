@@ -55,13 +55,26 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 
-	codecs, err := exec.Command("ffmpeg", "-encoders").Output()
+	codecsStr, err := exec.Command("ffmpeg", "-encoders").Output()
 	if err != nil {
 		log.Println(err)
 	}
 
-	// TODO: parse the codecs and get the one we care about.
-	log.Println(strings.Split(strings.Split(string(codecs), " ------\n")[1], "\n"))
+	codecs := strings.Split(strings.Split(string(codecsStr), " ------\n")[1], "\n")
+
+	for i, codec := range codecs {
+		if codec == "" {
+			continue
+		}
+		codecs[i] = strings.Fields(codec)[1]
+
+		// hardcoded indexes are never bad YEP :)))
+		if contains(SupportedVideoEncoders, codecs[i]) {
+			Configs[2].Opts = append(Configs[2].Opts, codecs[i])
+		} else if contains(SupportedAudioEncoders, codecs[i]) {
+			Configs[3].Opts = append(Configs[3].Opts, codecs[i])
+		}
+	}
 
 	return &model{
 		IsDirectory:           fileInfo.IsDir(),
