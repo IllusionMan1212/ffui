@@ -20,7 +20,9 @@ var checkmark = lipgloss.NewStyle().Foreground(lipgloss.Color("#22FF33")).Render
 var x = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF2233")).Render("✖️")
 
 const (
-	Cfg Screen = iota
+	None Screen = iota
+	Files
+	Cfg
 	Main
 )
 
@@ -106,7 +108,7 @@ func (m model) updateConfigFocusedOptions() {
 }
 
 func (m model) Init() tea.Cmd {
-	return tea.Batch(m.Spinner.Tick, initCfg)
+	return tea.Batch(m.Spinner.Tick, m.statFiles)
 }
 
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -117,9 +119,30 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ErrQuitMessage = msg.msg
 		m.ErrQuit = true
 		return m, m.cleanUp
+	case filesStatMsg:
+		m.FileCount = msg.fileCount
+		m.Files = msg.files
+
+		if len(m.Files) == 1 {
+			m.Screen = Cfg
+		} else if len(m.Files) > 1 {
+			m.Screen = Files
+		}
+
+		return m, nil
 	}
 
 	switch m.Screen {
+	case Files:
+		// TODO: navigate files and select them and stuff
+		switch msg := msg.(type) {
+		case tea.KeyMsg:
+			key := msg.String()
+			switch key {
+			case "ctrl+c", "esc":
+				return m, tea.Quit
+			}
+		}
 	case Cfg:
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
@@ -178,7 +201,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case parsedCfgMsg:
 			m.Screen = Main
 			m.ParsedConfig = msg.parsedConfig
-			return m, tea.Batch(m.Spinner.Tick, m.statFile)
+			return m, tea.Batch(m.Spinner.Tick, startEncoding)
 		}
 	case Main:
 		switch msg := msg.(type) {
@@ -194,10 +217,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, tea.Quit
 			}
-		case initUi:
-			m.FileCount = msg.fileCount
-			m.Files = msg.files
-
+		case encodingStartedMsg:
 			if m.DryRun {
 				return m, gracefullyQuit
 			}
@@ -272,6 +292,19 @@ func parseConfig(cfg []Config) ParsedConfig {
 		Preset:         preset.Opts[preset.FocusedOption],
 		CRF:            crf.Opts[crf.FocusedOption],
 	}
+}
+
+func FilesScreenView(m model) string {
+	view := ""
+
+	// TODO: Create a nice view where we can select different videos and then select the encoding options and start
+	// encoding.
+	for _, file := range m.Files {
+		view += filepath.Base(file)
+		view += "\n"
+	}
+
+	return view
 }
 
 func CfgScreenView(m model) string {
@@ -393,6 +426,8 @@ func (m model) View() string {
 	}
 
 	switch m.Screen {
+	case Files:
+		return FilesScreenView(m)
 	case Cfg:
 		return CfgScreenView(m)
 	case Main:

@@ -92,9 +92,7 @@ func buildFFmpegCmdArgs(fullFilePath string, outFullFilePath string, cfg ParsedC
 		args = append(args, cfg.AudioEncoder)
 	}
 
-	for _, arg := range additionalArgs {
-		args = append(args, arg)
-	}
+	args = append(args, additionalArgs...)
 
 	// Output file
 	args = append(args, outFullFilePath)

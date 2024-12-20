@@ -25,23 +25,23 @@ type ffmpegProcessStart struct {
 	cmd *exec.Cmd
 }
 
-type initUi struct {
+type filesStatMsg struct {
 	fileCount int
 	files     []string
 }
 
-func (m *model) statFile() tea.Msg {
+func (m *model) statFiles() tea.Msg {
 	if m.IsDirectory {
 		entries, _ := os.ReadDir(m.Path)
 
 		sort.Sort(DirEntrySlice(entries))
 
 		for _, entry := range entries {
-			fullFilePath := filepath.Join(m.Path, entry.Name())
-
-			if entry.IsDir() {
+			if entry.IsDir() || !entry.Type().IsRegular() {
 				continue
 			}
+
+			fullFilePath := filepath.Join(m.Path, entry.Name())
 
 			mType, err := mimetype.DetectFile(fullFilePath)
 			if err != nil {
@@ -55,15 +55,25 @@ func (m *model) statFile() tea.Msg {
 			m.FileCount++
 			m.Files = append(m.Files, fullFilePath)
 		}
+
+		if len(m.Files) == 0 {
+			return errQuitMsg{"Chosen directory has no video files"}
+		}
 	} else {
 		m.FileCount = 1
 		m.Files = append(m.Files, m.Path)
 	}
 
-	return initUi{
+	return filesStatMsg{
 		fileCount: m.FileCount,
 		files:     m.Files,
 	}
+}
+
+type encodingStartedMsg struct{}
+
+func startEncoding() tea.Msg {
+	return encodingStartedMsg{}
 }
 
 type encodeVideoMsg struct{}
@@ -76,12 +86,6 @@ type quitMsg struct{}
 
 func gracefullyQuit() tea.Msg {
 	return quitMsg{}
-}
-
-type initCfgMsg struct{}
-
-func initCfg() tea.Msg {
-	return initCfgMsg{}
 }
 
 type parsedCfgMsg struct {
@@ -117,6 +121,10 @@ type errQuitMsg struct {
 }
 
 func (m *model) cleanUp() tea.Msg {
+	if len(m.Files) == 0 {
+		return tea.Quit()
+	}
+
 	fullFilePath := m.Files[len(m.Files)-1]
 	fileName := filepath.Base(fullFilePath)
 
@@ -124,7 +132,7 @@ func (m *model) cleanUp() tea.Msg {
 	extensionIndex := strings.LastIndex(fileName, ".")
 	newFileName := fileName[:extensionIndex]
 	extension := fileName[extensionIndex:]
-	newFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf(" [%s] [%s]", m.ParsedConfig.VideoEncoder, m.ParsedConfig.AudioEncoder)+extension)
+	newFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf("_[%s]_[%s]", m.ParsedConfig.VideoEncoder, m.ParsedConfig.AudioEncoder)+extension)
 
 	os.Remove(newFileFullPath)
 
