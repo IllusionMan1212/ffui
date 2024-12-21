@@ -16,8 +16,8 @@ import (
 
 type Screen int
 
-var checkmark = lipgloss.NewStyle().Foreground(lipgloss.Color("#22FF33")).Render("✔")
-var x = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF2233")).Render("✖️")
+var Checkmark = lipgloss.NewStyle().Foreground(lipgloss.Color("#22FF33")).Render("✔")
+var X = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF2233")).Render("✖️")
 
 const (
 	None Screen = iota
@@ -25,6 +25,11 @@ const (
 	Cfg
 	Main
 )
+
+type File struct {
+	Name   string
+	Encode bool
+}
 
 type model struct {
 	IsDirectory           bool
@@ -118,7 +123,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errQuitMsg:
 		m.ErrQuitMessage = msg.msg
 		m.ErrQuit = true
-		return m, m.cleanUp
+		return m, tea.Sequence(tea.ExitAltScreen, m.cleanUp)
 	case filesStatMsg:
 		m.FileCount = msg.fileCount
 		m.Files = msg.files
@@ -141,6 +146,26 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch key {
 			case "ctrl+c", "esc":
 				return m, tea.Quit
+			case "enter", "space":
+				// TODO: change the file state to Encode = true
+				// Also change the files to be of File type
+				// t := m.Files[m.FocusIndex]
+			case "g":
+				m.FocusIndex = 0
+			case "G":
+				m.FocusIndex = len(m.Files) - 1
+			case "tab", "shift+tab", "up", "down", "j", "k":
+				if key == "up" || key == "shift+tab" || key == "k" {
+					m.FocusIndex--
+				} else {
+					m.FocusIndex++
+				}
+
+				if m.FocusIndex >= len(m.Files) {
+					m.FocusIndex = 0
+				} else if m.FocusIndex < 0 {
+					m.FocusIndex = len(m.Files) - 1
+				}
 			}
 		}
 	case Cfg:
@@ -215,11 +240,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					log.Println("An error occurred when sending SIGINT to the ffmpeg process:")
 					log.Println(err)
 				}
-				return m, tea.Quit
+				return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 			}
 		case encodingStartedMsg:
 			if m.DryRun {
-				return m, gracefullyQuit
+				return m, tea.Sequence(tea.ExitAltScreen, gracefullyQuit)
 			}
 
 			return m, encodeVideo
@@ -245,7 +270,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Files = m.Files[:len(m.Files)-1]
 
 			if len(m.Files) == 0 {
-				return m, gracefullyQuit
+				return m, tea.Sequence(tea.ExitAltScreen, gracefullyQuit)
 			}
 
 			return m, encodeVideo
@@ -299,10 +324,15 @@ func FilesScreenView(m model) string {
 
 	// TODO: Create a nice view where we can select different videos and then select the encoding options and start
 	// encoding.
-	for _, file := range m.Files {
-		view += filepath.Base(file)
-		view += "\n"
+	for i, file := range m.Files {
+		if m.FocusIndex == i {
+			view += fmt.Sprintf(FocusedConfig.Render("[%s] %s"), " ", filepath.Base(file))
+		} else {
+			view += fmt.Sprintf(BlurredConfig.Render("[%s] %s"), " ", filepath.Base(file))
+		}
 	}
+
+	view += "\n"
 
 	return view
 }
@@ -413,16 +443,17 @@ func (m model) View() string {
 				sb.WriteByte('\n')
 			}
 
-			return fmt.Sprintf("%s %s\n", checkmark, sb.String())
+			return fmt.Sprintf("%s %s\n", Checkmark, sb.String())
 		} else {
-			return fmt.Sprintf("%s %d/%d files encoded\n", checkmark, m.FileCount-len(m.Files), m.FileCount)
+			return fmt.Sprintf("%s %d/%d files encoded\n", Checkmark, m.FileCount-len(m.Files), m.FileCount)
 		}
 	} else if m.Cancelled {
-		return fmt.Sprintf("%s Encoding cancelled. Stopped ffmpeg process.\n   Make sure to clean up the created file\n", x)
+		// TODO: should we clean up the file ourselves?
+		return fmt.Sprintf("%s Encoding cancelled. Stopped ffmpeg process.\n   Make sure to clean up the created file\n", X)
 	}
 
 	if m.ErrQuit {
-		return fmt.Sprintf("%s %s\n", x, m.ErrQuitMessage)
+		return fmt.Sprintf("%s %s\n", X, m.ErrQuitMessage)
 	}
 
 	switch m.Screen {

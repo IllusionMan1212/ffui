@@ -35,7 +35,7 @@ func main() {
 
 	ffui := initialModel(fileInfo, absolutePath)
 
-	p := tea.NewProgram(ffui)
+	p := tea.NewProgram(ffui, tea.WithAltScreen())
 
 	ffui.Program = p
 
@@ -46,7 +46,7 @@ func main() {
 		log.Fatal(err)
 	}
 
-	err = p.Start()
+	_, err = p.Run()
 
 	if err != nil {
 		log.Fatal(err)
