@@ -46,10 +46,28 @@ func main() {
 		log.Fatal(err)
 	}
 
-	_, err = p.Run()
+	final, err := p.Run()
 
 	if err != nil {
+		fmt.Println(err)
 		log.Fatal(err)
+	}
+
+	finalModel, _ := final.(Model)
+
+	if finalModel.DryRun {
+		for _, file := range finalModel.Files {
+			parentDir := filepath.Dir(file)
+			fileName := filepath.Base(file)
+			extensionIndex := strings.LastIndex(fileName, ".")
+			newFileName := fileName[:extensionIndex]
+			extension := fileName[extensionIndex:]
+			outFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf("_[%s]_[%s]", finalModel.ParsedConfig.VideoEncoder, finalModel.ParsedConfig.AudioEncoder)+extension)
+
+			cmd := exec.Command("ffmpeg", buildFFmpegCmdArgs(file, outFileFullPath, finalModel.ParsedConfig)...)
+
+			fmt.Println(fmt.Sprintf("%s %s", Checkmark, cmd.String()))
+		}
 	}
 }
 

@@ -30,7 +30,7 @@ type filesStatMsg struct {
 	files     []string
 }
 
-func (m *model) statFiles() tea.Msg {
+func (m *Model) statFiles() tea.Msg {
 	if m.IsDirectory {
 		entries, _ := os.ReadDir(m.Path)
 
@@ -70,12 +70,6 @@ func (m *model) statFiles() tea.Msg {
 	}
 }
 
-type encodingStartedMsg struct{}
-
-func startEncoding() tea.Msg {
-	return encodingStartedMsg{}
-}
-
 type encodeVideoMsg struct{}
 
 func encodeVideo() tea.Msg {
@@ -93,7 +87,7 @@ type parsedCfgMsg struct {
 	dryRun       bool
 }
 
-func (m *model) parseConfig(dryRun bool) tea.Cmd {
+func (m *Model) parseConfig(dryRun bool) tea.Cmd {
 	m.DryRun = dryRun
 
 	return func() tea.Msg {
@@ -120,7 +114,7 @@ type errQuitMsg struct {
 	msg string
 }
 
-func (m *model) cleanUp() tea.Msg {
+func (m *Model) cleanUp() tea.Msg {
 	if len(m.Files) == 0 {
 		return tea.Quit()
 	}

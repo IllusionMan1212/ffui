@@ -31,7 +31,7 @@ type File struct {
 	Encode bool
 }
 
-type model struct {
+type Model struct {
 	IsDirectory           bool
 	Path                  string
 	CurrentFileName       string
@@ -57,7 +57,9 @@ type model struct {
 	ErrQuitMessage        string
 }
 
-func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
+// We're returning a pointer here so we can embed the tea.Program on the original model
+// instead of a copy.
+func initialModel(fileInfo os.FileInfo, absolutePath string) *Model {
 	s := spinner.New()
 	s.Spinner = spinner.Dot
 	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
@@ -83,7 +85,7 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
 		}
 	}
 
-	return &model{
+	return &Model{
 		IsDirectory:           fileInfo.IsDir(),
 		CurrentFileName:       fileInfo.Name(),
 		Path:                  absolutePath,
@@ -102,7 +104,7 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *model {
 	}
 }
 
-func (m model) updateConfigFocusedOptions() {
+func (m Model) updateConfigFocusedOptions() {
 	for _, visCfg := range m.VisibleConfig {
 		for i := range m.Config {
 			if m.Config[i].Name == visCfg.Name {
@@ -112,11 +114,11 @@ func (m model) updateConfigFocusedOptions() {
 	}
 }
 
-func (m model) Init() tea.Cmd {
+func (m Model) Init() tea.Cmd {
 	return tea.Batch(m.Spinner.Tick, m.statFiles)
 }
 
-func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 
 	switch msg := msg.(type) {
@@ -226,7 +228,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case parsedCfgMsg:
 			m.Screen = Main
 			m.ParsedConfig = msg.parsedConfig
-			return m, tea.Batch(m.Spinner.Tick, startEncoding)
+			if m.DryRun {
+				return m, tea.Batch(tea.ExitAltScreen, tea.Quit)
+			}
+
+			return m, tea.Batch(m.Spinner.Tick, encodeVideo)
 		}
 	case Main:
 		switch msg := msg.(type) {
@@ -242,12 +248,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 			}
-		case encodingStartedMsg:
-			if m.DryRun {
-				return m, tea.Sequence(tea.ExitAltScreen, gracefullyQuit)
-			}
-
-			return m, encodeVideo
 		case encodeVideoMsg:
 			m.CurrentFileName = filepath.Base(m.Files[len(m.Files)-1])
 
@@ -319,7 +319,7 @@ func parseConfig(cfg []Config) ParsedConfig {
 	}
 }
 
-func FilesScreenView(m model) string {
+func FilesScreenView(m Model) string {
 	view := ""
 
 	// TODO: Create a nice view where we can select different videos and then select the encoding options and start
@@ -337,7 +337,7 @@ func FilesScreenView(m model) string {
 	return view
 }
 
-func CfgScreenView(m model) string {
+func CfgScreenView(m Model) string {
 	view := ""
 
 	for i, cfg := range m.VisibleConfig {
@@ -379,7 +379,7 @@ func CfgScreenView(m model) string {
 	return view
 }
 
-func MainScreenView(m model) string {
+func MainScreenView(m Model) string {
 	progress := ""
 
 	if m.IsDirectory {
@@ -425,28 +425,13 @@ func formatEstimate(estimate int) string {
 	return fmt.Sprintf("%ds", estimate)
 }
 
-func (m model) View() string {
+func (m Model) View() string {
+	if m.DryRun {
+		return ""
+	}
+
 	if m.Quitting {
-		if m.DryRun {
-			sb := strings.Builder{}
-			for _, file := range m.Files {
-				parentDir := filepath.Dir(file)
-				fileName := filepath.Base(file)
-				extensionIndex := strings.LastIndex(fileName, ".")
-				newFileName := fileName[:extensionIndex]
-				extension := fileName[extensionIndex:]
-				outFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf("_[%s]_[%s]", m.ParsedConfig.VideoEncoder, m.ParsedConfig.AudioEncoder)+extension)
-
-				cmd := exec.Command("ffmpeg", buildFFmpegCmdArgs(file, outFileFullPath, m.ParsedConfig)...)
-
-				sb.WriteString(cmd.String())
-				sb.WriteByte('\n')
-			}
-
-			return fmt.Sprintf("%s %s\n", Checkmark, sb.String())
-		} else {
-			return fmt.Sprintf("%s %d/%d files encoded\n", Checkmark, m.FileCount-len(m.Files), m.FileCount)
-		}
+		return fmt.Sprintf("%s %d/%d files encoded\n", Checkmark, m.FileCount-len(m.Files), m.FileCount)
 	} else if m.Cancelled {
 		// TODO: should we clean up the file ourselves?
 		return fmt.Sprintf("%s Encoding cancelled. Stopped ffmpeg process.\n   Make sure to clean up the created file\n", X)
