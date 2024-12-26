@@ -51,6 +51,7 @@ type Model struct {
 	Config                []Config
 	VisibleConfig         []Config
 	FocusIndex            int
+	ChoiceIndex           int
 	ParsedConfig          ParsedConfig
 	DryRun                bool
 	ErrQuit               bool
@@ -180,16 +181,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "enter", " ":
 				// parse config and switch to main screen if we're focused on the start button
 				if m.FocusIndex == len(m.VisibleConfig) {
-					return m, m.parseConfig(false)
-				}
-				// parse config, print it and exit
-				if m.FocusIndex == len(m.VisibleConfig)+1 {
-					return m, m.parseConfig(true)
+					if m.ChoiceIndex == 0 {
+						return m, m.parseConfig(false)
+					} else if m.ChoiceIndex == 1 {
+						return m, m.parseConfig(true)
+					}
 				}
 			case "g":
 				m.FocusIndex = 0
 			case "G":
-				m.FocusIndex = len(m.VisibleConfig) + 1
+				m.FocusIndex = len(m.VisibleConfig)
 			case "tab", "shift+tab", "up", "down", "j", "k":
 				if key == "up" || key == "shift+tab" || key == "k" {
 					m.FocusIndex--
@@ -197,10 +198,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.FocusIndex++
 				}
 
-				if m.FocusIndex >= len(m.VisibleConfig)+2 {
+				if m.FocusIndex > len(m.VisibleConfig) {
 					m.FocusIndex = 0
 				} else if m.FocusIndex < 0 {
-					m.FocusIndex = len(m.VisibleConfig) + 1
+					m.FocusIndex = len(m.VisibleConfig)
 				}
 			case "left", "right", "h", "l":
 				// If we're not hovering a button
@@ -220,6 +221,18 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 					m.updateConfigFocusedOptions()
 					m.VisibleConfig = getVisibleConfigs(m.Config)
+				} else {
+					if key == "right" || key == "l" {
+						m.ChoiceIndex++
+					} else {
+						m.ChoiceIndex--
+					}
+
+					if m.ChoiceIndex > 1 {
+						m.ChoiceIndex = 0
+					} else if m.ChoiceIndex < 0 {
+						m.ChoiceIndex = 1
+					}
 				}
 			}
 		case quitMsg:
@@ -362,18 +375,22 @@ func CfgScreenView(m Model) string {
 		}
 	}
 
-	if m.FocusIndex == len(m.VisibleConfig) {
-		view += FocusedStartButton
+	var startButton string
+	var dryRunButton string
+
+	if m.FocusIndex == len(m.VisibleConfig) && m.ChoiceIndex == 0 {
+		startButton = FocusedStartButton
 	} else {
-		view += BlurredStartButton
+		startButton = BlurredStartButton
 	}
 
-	if m.FocusIndex == len(m.VisibleConfig)+1 {
-		view += FocusedDryRunButton
+	if m.FocusIndex == len(m.VisibleConfig) && m.ChoiceIndex == 1 {
+		dryRunButton = FocusedDryRunButton
 	} else {
-		view += BlurredDryRunButton
+		dryRunButton = BlurredDryRunButton
 	}
 
+	view += lipgloss.JoinHorizontal(0, startButton, dryRunButton)
 	view += "\n"
 
 	return view
