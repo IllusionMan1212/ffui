@@ -135,7 +135,7 @@ func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedC
 	newFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf("_[%s]_[%s]", cfg.VideoEncoder, cfg.AudioEncoder)+extension)
 
 	if _, err := os.Stat(newFileFullPath); err == nil {
-		if cfg.SkipEncodedVid {
+		if cfg.IgnoreConflictingName {
 			log.Printf("Skipping \"%s\" because it already exists with the exact same encodings (crf and preset might be different though)", newFileFullPath)
 			teaP.Send(finishedEncodingVideo{})
 			return

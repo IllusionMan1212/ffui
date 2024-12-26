@@ -18,7 +18,7 @@ var SupportedAudioEncoders = []string{
 
 var Configs = []Config{
 	{Name: "Delete old video(s)?", Opts: []string{"No", "Yes"}, FocusedOption: 1},
-	{Name: "What should we do about encoded videos?", Opts: []string{"Skip", "Delete and encode again"}},
+	{Name: "On name conflict?", Opts: []string{"Ignore", "Overwrite"}},
 	{Name: "Video Encoder", Opts: []string{"copy"}},
 	{Name: "Audio Encoder", Opts: []string{"None", "copy"}, FocusedOption: 1},
 	{Name: "Preset", Opts: []string{"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"}, FocusedOption: 4},
@@ -32,12 +32,12 @@ type Config struct {
 }
 
 type ParsedConfig struct {
-	DeleteOldVideo bool
-	SkipEncodedVid bool
-	VideoEncoder   string
-	AudioEncoder   string
-	Preset         string
-	CRF            string
+	DeleteOldVideo        bool
+	IgnoreConflictingName bool
+	VideoEncoder          string
+	AudioEncoder          string
+	Preset                string
+	CRF                   string
 }
 
 func find(cfgs []Config, name string) Config {

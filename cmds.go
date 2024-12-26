@@ -98,12 +98,12 @@ func (m *Model) parseConfig(dryRun bool) tea.Cmd {
 
 		return parsedCfgMsg{
 			parsedConfig: ParsedConfig{
-				DeleteOldVideo: find(m.Config, "Delete old video(s)?").FocusedOption != 0,
-				SkipEncodedVid: find(m.Config, "What should we do about encoded videos?").FocusedOption == 0,
-				VideoEncoder:   vEncoder.Opts[vEncoder.FocusedOption],
-				AudioEncoder:   aEncoder.Opts[aEncoder.FocusedOption],
-				Preset:         preset.Opts[preset.FocusedOption],
-				CRF:            crf.Opts[crf.FocusedOption],
+				DeleteOldVideo:        find(m.Config, "Delete old video(s)?").FocusedOption != 0,
+				IgnoreConflictingName: find(m.Config, "On name conflict?").FocusedOption == 0,
+				VideoEncoder:          vEncoder.Opts[vEncoder.FocusedOption],
+				AudioEncoder:          aEncoder.Opts[aEncoder.FocusedOption],
+				Preset:                preset.Opts[preset.FocusedOption],
+				CRF:                   crf.Opts[crf.FocusedOption],
 			},
 			dryRun: dryRun,
 		}

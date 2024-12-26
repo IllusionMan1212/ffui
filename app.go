@@ -310,12 +310,12 @@ func parseConfig(cfg []Config) ParsedConfig {
 	crf := find(cfg, "Constant Rate Factor (CRF)")
 
 	return ParsedConfig{
-		DeleteOldVideo: find(cfg, "Delete old video(s)?").FocusedOption != 0,
-		SkipEncodedVid: find(cfg, "What should we do about encoded videos?").FocusedOption == 0,
-		VideoEncoder:   vEncoder.Opts[vEncoder.FocusedOption],
-		AudioEncoder:   aEncoder.Opts[aEncoder.FocusedOption],
-		Preset:         preset.Opts[preset.FocusedOption],
-		CRF:            crf.Opts[crf.FocusedOption],
+		DeleteOldVideo:        find(cfg, "Delete old video(s)?").FocusedOption != 0,
+		IgnoreConflictingName: find(cfg, "On name conflict?").FocusedOption == 0,
+		VideoEncoder:          vEncoder.Opts[vEncoder.FocusedOption],
+		AudioEncoder:          aEncoder.Opts[aEncoder.FocusedOption],
+		Preset:                preset.Opts[preset.FocusedOption],
+		CRF:                   crf.Opts[crf.FocusedOption],
 	}
 }
 
