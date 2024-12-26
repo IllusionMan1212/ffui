@@ -51,41 +51,18 @@ func find(cfgs []Config, name string) Config {
 	panic(err)
 }
 
-func filter(cfgs []Config, names ...string) []Config {
-	filtered := make([]Config, 0)
-
-cfgloop:
-	for _, cfg := range cfgs {
-		for _, name := range names {
-			if cfg.Name == name {
-				continue cfgloop
-			}
-		}
-
-		filtered = append(filtered, cfg)
-	}
-
-	return filtered
-}
-
-func contains[T comparable](slice []T, elem T) bool {
-	for _, e := range slice {
-		if e == elem {
-			return true
-		}
-	}
-
-	return false
-}
-
 func getVisibleConfigs(cfgs []Config) []Config {
 	parsed := parseConfig(cfgs)
 
 	switch parsed.VideoEncoder {
 	case "copy", "librav1e":
-		return filter(cfgs, "Preset", "Constant Rate Factor (CRF)")
+		return filter(cfgs, func(c Config) bool {
+			return c.Name != "Preset" && c.Name != "Constant Rate Factor (CRF)"
+		})
 	case "libvpx-vp9", "libsvtav1":
-		return filter(cfgs, "Preset")
+		return filter(cfgs, func(c Config) bool {
+			return c.Name != "Preset"
+		})
 	}
 
 	return cfgs

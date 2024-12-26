@@ -18,6 +18,11 @@ var (
 		Light: "#1C6DD0",
 	}
 
+	DisabledColor = lipgloss.AdaptiveColor{
+		Dark:  "#444",
+		Light: "#AAA",
+	}
+
 	BlurredConfig = lipgloss.NewStyle().
 			Foreground(PrimaryColor).
 			MarginTop(1)
@@ -49,6 +54,32 @@ var (
 				Padding(0, 2).
 				Align(lipgloss.Center).
 				Render("Start Encoding!")
+	DisabledStartButton = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(DisabledColor).
+				Foreground(DisabledColor).
+				MarginTop(1).
+				Padding(0, 2).
+				Align(lipgloss.Center).
+				Render("Start Encoding!")
+
+	FocusedNextButton = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(AccentColor).
+				Foreground(AccentColor).
+				MarginTop(1).
+				Padding(0, 2).
+				Align(lipgloss.Center).
+				Bold(true).
+				Render("Next")
+	BlurredNextButton = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(PrimaryColor).
+				Foreground(PrimaryColor).
+				MarginTop(1).
+				Padding(0, 2).
+				Align(lipgloss.Center).
+				Render("Next")
 
 	FocusedDryRunButton = lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder()).
@@ -67,4 +98,21 @@ var (
 				Padding(0, 2).
 				Align(lipgloss.Center).
 				Render("Print FFmpeg command and exit")
+
+	FocusedSelectAllButton = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(AccentColor).
+				Foreground(AccentColor).
+				MarginTop(1).
+				Padding(0, 2).
+				Align(lipgloss.Center).
+				Bold(true)
+	BlurredSelectAllButton = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder()).
+				BorderForeground(PrimaryColor).
+				Foreground(PrimaryColor).
+				MarginTop(1).
+				Padding(0, 2).
+				Align(lipgloss.Center).
+				Bold(true)
 )

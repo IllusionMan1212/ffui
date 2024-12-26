@@ -57,14 +57,14 @@ func main() {
 
 	if finalModel.DryRun {
 		for _, file := range finalModel.Files {
-			parentDir := filepath.Dir(file)
-			fileName := filepath.Base(file)
+			parentDir := filepath.Dir(file.Path)
+			fileName := filepath.Base(file.Path)
 			extensionIndex := strings.LastIndex(fileName, ".")
 			newFileName := fileName[:extensionIndex]
 			extension := fileName[extensionIndex:]
 			outFileFullPath := filepath.Join(parentDir, newFileName+fmt.Sprintf("_[%s]_[%s]", finalModel.ParsedConfig.VideoEncoder, finalModel.ParsedConfig.AudioEncoder)+extension)
 
-			cmd := exec.Command("ffmpeg", buildFFmpegCmdArgs(file, outFileFullPath, finalModel.ParsedConfig)...)
+			cmd := exec.Command("ffmpeg", buildFFmpegCmdArgs(file.Path, outFileFullPath, finalModel.ParsedConfig)...)
 
 			fmt.Println(fmt.Sprintf("%s %s", Checkmark, cmd.String()))
 		}
@@ -118,8 +118,8 @@ func buildFFmpegCmdArgs(fullFilePath string, outFullFilePath string, cfg ParsedC
 	return args
 }
 
-func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedConfig) {
-	mType, err := mimetype.DetectFile(fullFilePath)
+func encode(file File, fileName string, teaP *tea.Program, cfg ParsedConfig) {
+	mType, err := mimetype.DetectFile(file.Path)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -128,7 +128,7 @@ func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedC
 		log.Fatalf("%s is not a valid video file\n", fileName)
 	}
 
-	parentDir := filepath.Dir(fullFilePath)
+	parentDir := filepath.Dir(file.Path)
 	extensionIndex := strings.LastIndex(fileName, ".")
 	newFileName := fileName[:extensionIndex]
 	extension := fileName[extensionIndex:]
@@ -144,7 +144,7 @@ func encode(fullFilePath string, fileName string, teaP *tea.Program, cfg ParsedC
 		}
 	}
 
-	cmdArgs := buildFFmpegCmdArgs(fullFilePath, newFileFullPath, cfg, "-progress", "unix://"+getProgressSocket(fullFilePath, teaP))
+	cmdArgs := buildFFmpegCmdArgs(file.Path, newFileFullPath, cfg, "-progress", "unix://"+getProgressSocket(file.Path, teaP))
 	cmd := exec.Command("ffmpeg", cmdArgs...)
 	teaP.Send(ffmpegProcessStart{cmd})
 	err = cmd.Run()

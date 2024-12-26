@@ -3,7 +3,9 @@ package main
 import "testing"
 
 func TestFilterConfigs(t *testing.T) {
-	cfgs := filter(Configs, "Preset", "Constant Rate Factor (CRF)")
+	cfgs := filter(Configs, func(c Config) bool {
+		return c.Name != "Preset" && c.Name != "Constant Rate Factor (CRF)"
+	})
 
 	for _, cfg := range cfgs {
 		if cfg.Name == "Preset" {

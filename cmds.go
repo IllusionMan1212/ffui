@@ -27,7 +27,7 @@ type ffmpegProcessStart struct {
 
 type filesStatMsg struct {
 	fileCount int
-	files     []string
+	files     []File
 }
 
 func (m *Model) statFiles() tea.Msg {
@@ -53,7 +53,7 @@ func (m *Model) statFiles() tea.Msg {
 			}
 
 			m.FileCount++
-			m.Files = append(m.Files, fullFilePath)
+			m.Files = append(m.Files, File{Path: fullFilePath})
 		}
 
 		if len(m.Files) == 0 {
@@ -61,7 +61,7 @@ func (m *Model) statFiles() tea.Msg {
 		}
 	} else {
 		m.FileCount = 1
-		m.Files = append(m.Files, m.Path)
+		m.Files = append(m.Files, File{Path: m.Path, Selected: true})
 	}
 
 	return filesStatMsg{
@@ -119,10 +119,10 @@ func (m *Model) cleanUp() tea.Msg {
 		return tea.Quit()
 	}
 
-	fullFilePath := m.Files[len(m.Files)-1]
-	fileName := filepath.Base(fullFilePath)
+	file := m.Files[len(m.Files)-1]
+	fileName := filepath.Base(file.Path)
 
-	parentDir := filepath.Dir(fullFilePath)
+	parentDir := filepath.Dir(file.Path)
 	extensionIndex := strings.LastIndex(fileName, ".")
 	newFileName := fileName[:extensionIndex]
 	extension := fileName[extensionIndex:]

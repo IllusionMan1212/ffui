@@ -21,14 +21,14 @@ var X = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF2233")).Render("✖️
 
 const (
 	None Screen = iota
-	Files
 	Cfg
+	Files
 	Main
 )
 
 type File struct {
-	Name   string
-	Encode bool
+	Path     string
+	Selected bool
 }
 
 type Model struct {
@@ -36,7 +36,7 @@ type Model struct {
 	Path                  string
 	CurrentFileName       string
 	FileCount             int
-	Files                 []string
+	Files                 []File
 	Spinner               spinner.Model
 	SingleFileProgressBar progress.Model
 	SingleFileProgress    float64
@@ -91,7 +91,8 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *Model {
 		CurrentFileName:       fileInfo.Name(),
 		Path:                  absolutePath,
 		FileCount:             0,
-		Files:                 make([]string, 0),
+		Files:                 make([]File, 0),
+		Screen:                Cfg,
 		Spinner:               s,
 		SingleFileProgressBar: progress.New(progress.WithGradient("#1010ff", "#00ff00")),
 		SingleFileProgress:    0.0,
@@ -131,32 +132,61 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.FileCount = msg.fileCount
 		m.Files = msg.files
 
-		if len(m.Files) == 1 {
-			m.Screen = Cfg
-		} else if len(m.Files) > 1 {
-			m.Screen = Files
-		}
-
 		return m, nil
 	}
 
 	switch m.Screen {
 	case Files:
-		// TODO: navigate files and select them and stuff
 		switch msg := msg.(type) {
 		case tea.KeyMsg:
 			key := msg.String()
 			switch key {
 			case "ctrl+c", "esc":
 				return m, tea.Quit
-			case "enter", "space":
-				// TODO: change the file state to Encode = true
-				// Also change the files to be of File type
-				// t := m.Files[m.FocusIndex]
+			case "enter", " ":
+				if m.FocusIndex == 0 && key == "enter" {
+					selectAll := !every(m.Files, func(e File) bool { return e.Selected })
+
+					if m.ChoiceIndex == 0 {
+						for i := range m.Files {
+							m.Files[i].Selected = selectAll
+						}
+					} else {
+						m.Files = filter(m.Files, func(f File) bool {
+							return f.Selected
+						})
+
+						m.Screen = Main
+						m.FileCount = len(m.Files)
+
+						return m, tea.Batch(m.Spinner.Tick, encodeVideo)
+					}
+				} else if m.FocusIndex != 0 {
+					m.Files[m.FocusIndex-1].Selected = !m.Files[m.FocusIndex-1].Selected
+
+					// Reset the choice to "Select All" button when no files are selected
+					if !anyOf(m.Files, func(f File) bool { return f.Selected }) {
+						m.ChoiceIndex = 0
+					}
+				}
 			case "g":
 				m.FocusIndex = 0
 			case "G":
-				m.FocusIndex = len(m.Files) - 1
+				m.FocusIndex = len(m.Files)
+			case "left", "right", "h", "l":
+				if m.FocusIndex == 0 && anyOf(m.Files, func(f File) bool { return f.Selected }) {
+					if key == "right" || key == "l" {
+						m.ChoiceIndex++
+					} else {
+						m.ChoiceIndex--
+					}
+
+					if m.ChoiceIndex > 1 {
+						m.ChoiceIndex = 0
+					} else if m.ChoiceIndex < 0 {
+						m.ChoiceIndex = 1
+					}
+				}
 			case "tab", "shift+tab", "up", "down", "j", "k":
 				if key == "up" || key == "shift+tab" || key == "k" {
 					m.FocusIndex--
@@ -164,10 +194,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					m.FocusIndex++
 				}
 
-				if m.FocusIndex >= len(m.Files) {
+				if m.FocusIndex >= len(m.Files)+1 {
 					m.FocusIndex = 0
 				} else if m.FocusIndex < 0 {
-					m.FocusIndex = len(m.Files) - 1
+					m.FocusIndex = len(m.Files)
 				}
 			}
 		}
@@ -239,13 +269,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Quitting = true
 			return m, tea.Quit
 		case parsedCfgMsg:
-			m.Screen = Main
 			m.ParsedConfig = msg.parsedConfig
+
 			if m.DryRun {
 				return m, tea.Batch(tea.ExitAltScreen, tea.Quit)
 			}
 
-			return m, tea.Batch(m.Spinner.Tick, encodeVideo)
+			if m.IsDirectory {
+				m.Screen = Files
+				m.FocusIndex = 0
+				m.ChoiceIndex = 0
+			} else {
+				m.Screen = Main
+
+				return m, tea.Batch(m.Spinner.Tick, encodeVideo)
+			}
 		}
 	case Main:
 		switch msg := msg.(type) {
@@ -262,11 +300,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Sequence(tea.ExitAltScreen, tea.Quit)
 			}
 		case encodeVideoMsg:
-			m.CurrentFileName = filepath.Base(m.Files[len(m.Files)-1])
+			m.CurrentFileName = filepath.Base(m.Files[len(m.Files)-1].Path)
 
 			go func() {
-				fullFilePath := m.Files[len(m.Files)-1]
-				encode(fullFilePath, filepath.Base(fullFilePath), m.Program, m.ParsedConfig)
+				file := m.Files[len(m.Files)-1]
+				encode(file, filepath.Base(file.Path), m.Program, m.ParsedConfig)
 			}()
 
 			return m, nil
@@ -276,8 +314,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case finishedEncodingVideo:
 			if m.ParsedConfig.DeleteOldVideo {
-				m.CurrentFileName = fmt.Sprintf("Deleting: %s", filepath.Base(m.Files[len(m.Files)-1]))
-				os.Remove(m.Files[len(m.Files)-1])
+				m.CurrentFileName = fmt.Sprintf("Deleting: %s", filepath.Base(m.Files[len(m.Files)-1].Path))
+				os.Remove(m.Files[len(m.Files)-1].Path)
 			}
 
 			m.Files = m.Files[:len(m.Files)-1]
@@ -333,19 +371,52 @@ func parseConfig(cfg []Config) ParsedConfig {
 }
 
 func FilesScreenView(m Model) string {
-	view := ""
+	view := lipgloss.NewStyle().Margin(1, 0).Render("Select the files you wish to encode.")
+	var files string
+	var buttons string
+	var selectAllBtnText string
 
-	// TODO: Create a nice view where we can select different videos and then select the encoding options and start
-	// encoding.
-	for i, file := range m.Files {
-		if m.FocusIndex == i {
-			view += fmt.Sprintf(FocusedConfig.Render("[%s] %s"), " ", filepath.Base(file))
+	allSelected := every(m.Files, func(e File) bool { return e.Selected })
+	noneSelected := !anyOf(m.Files, func(e File) bool { return e.Selected })
+
+	if allSelected {
+		selectAllBtnText = "Deselect All"
+	} else {
+		selectAllBtnText = "Select All"
+	}
+
+	blurredStartButton := BlurredStartButton
+	focusedStartButton := FocusedStartButton
+
+	if noneSelected {
+		blurredStartButton = DisabledStartButton
+		focusedStartButton = DisabledStartButton
+	}
+
+	if m.FocusIndex == 0 {
+		if m.ChoiceIndex == 0 {
+			buttons = lipgloss.JoinHorizontal(0, FocusedSelectAllButton.Render(selectAllBtnText), blurredStartButton)
 		} else {
-			view += fmt.Sprintf(BlurredConfig.Render("[%s] %s"), " ", filepath.Base(file))
+			buttons = lipgloss.JoinHorizontal(0, BlurredSelectAllButton.Render(selectAllBtnText), focusedStartButton)
+		}
+	} else {
+		buttons = lipgloss.JoinHorizontal(0, BlurredSelectAllButton.Render(selectAllBtnText), blurredStartButton)
+	}
+
+	// TODO: files should be a scrollable grid
+	for i, file := range m.Files {
+		selection := " "
+		if file.Selected {
+			selection = "x"
+		}
+		if m.FocusIndex == i+1 {
+			files += fmt.Sprintf(FocusedConfig.Render("[%s] %s"), selection, filepath.Base(file.Path))
+		} else {
+			files += fmt.Sprintf(BlurredConfig.Render("[%s] %s"), selection, filepath.Base(file.Path))
 		}
 	}
 
-	view += "\n"
+	view += lipgloss.JoinVertical(0, buttons, files)
 
 	return view
 }
@@ -379,9 +450,17 @@ func CfgScreenView(m Model) string {
 	var dryRunButton string
 
 	if m.FocusIndex == len(m.VisibleConfig) && m.ChoiceIndex == 0 {
-		startButton = FocusedStartButton
+		if m.IsDirectory {
+			startButton = FocusedNextButton
+		} else {
+			startButton = FocusedStartButton
+		}
 	} else {
-		startButton = BlurredStartButton
+		if m.IsDirectory {
+			startButton = BlurredNextButton
+		} else {
+			startButton = BlurredStartButton
+		}
 	}
 
 	if m.FocusIndex == len(m.VisibleConfig) && m.ChoiceIndex == 1 {
@@ -399,7 +478,7 @@ func CfgScreenView(m Model) string {
 func MainScreenView(m Model) string {
 	progress := ""
 
-	if m.IsDirectory {
+	if m.IsDirectory && m.FileCount > 1 {
 		progress = fmt.Sprintf("%s %d/%d files encoded\nFile Progress: %s\n\nTotal Progress: %s",
 			m.Spinner.View(),
 			m.FileCount-len(m.Files),
