@@ -10,6 +10,7 @@ import (
 
 	"github.com/charmbracelet/bubbles/progress"
 	"github.com/charmbracelet/bubbles/spinner"
+	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -35,8 +36,10 @@ type Model struct {
 	IsDirectory           bool
 	Path                  string
 	CurrentFileName       string
+	ViewportFocused       bool
 	FileCount             int
 	Files                 []File
+	Viewport              viewport.Model
 	Spinner               spinner.Model
 	SingleFileProgressBar progress.Model
 	SingleFileProgress    float64
@@ -92,6 +95,7 @@ func initialModel(fileInfo os.FileInfo, absolutePath string) *Model {
 		Path:                  absolutePath,
 		FileCount:             0,
 		Files:                 make([]File, 0),
+		Viewport:              viewport.New(0, 0),
 		Screen:                Cfg,
 		Spinner:               s,
 		SingleFileProgressBar: progress.New(progress.WithGradient("#1010ff", "#00ff00")),
@@ -133,6 +137,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Files = msg.files
 
 		return m, nil
+	case tea.WindowSizeMsg:
+		m.Viewport.Width = msg.Width
+		m.Viewport.Height = msg.Height - lipgloss.Height(FilesScreenViewHeader(m))
 	}
 
 	switch m.Screen {
@@ -144,7 +151,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "ctrl+c", "esc":
 				return m, tea.Quit
 			case "enter", " ":
-				if m.FocusIndex == 0 && key == "enter" {
+				if !m.ViewportFocused && key == "enter" {
 					selectAll := !every(m.Files, func(e File) bool { return e.Selected })
 
 					if m.ChoiceIndex == 0 {
@@ -161,20 +168,30 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 						return m, tea.Batch(m.Spinner.Tick, encodeVideo)
 					}
-				} else if m.FocusIndex != 0 {
-					m.Files[m.FocusIndex-1].Selected = !m.Files[m.FocusIndex-1].Selected
+				} else if m.ViewportFocused {
+					m.Files[m.FocusIndex].Selected = !m.Files[m.FocusIndex].Selected
 
 					// Reset the choice to "Select All" button when no files are selected
 					if !anyOf(m.Files, func(f File) bool { return f.Selected }) {
 						m.ChoiceIndex = 0
 					}
 				}
+
+				m.SetViewportContent()
 			case "g":
-				m.FocusIndex = 0
+				if m.ViewportFocused {
+					m.FocusIndex = 0
+					m.SetViewportContent()
+					m.Viewport.GotoTop()
+				}
 			case "G":
-				m.FocusIndex = len(m.Files)
+				if m.ViewportFocused {
+					m.FocusIndex = len(m.Files) - 1
+					m.SetViewportContent()
+					m.Viewport.GotoBottom()
+				}
 			case "left", "right", "h", "l":
-				if m.FocusIndex == 0 && anyOf(m.Files, func(f File) bool { return f.Selected }) {
+				if !m.ViewportFocused && anyOf(m.Files, func(f File) bool { return f.Selected }) {
 					if key == "right" || key == "l" {
 						m.ChoiceIndex++
 					} else {
@@ -187,17 +204,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.ChoiceIndex = 1
 					}
 				}
-			case "tab", "shift+tab", "up", "down", "j", "k":
-				if key == "up" || key == "shift+tab" || key == "k" {
-					m.FocusIndex--
-				} else {
-					m.FocusIndex++
-				}
+			case "tab", "shift+tab":
+				m.ViewportFocused = !m.ViewportFocused
+				m.SetViewportContent()
+			case "up", "down", "j", "k":
+				if m.ViewportFocused {
+					if key == "up" || key == "k" {
+						m.FocusIndex--
+					} else {
+						m.FocusIndex++
+					}
 
-				if m.FocusIndex >= len(m.Files)+1 {
-					m.FocusIndex = 0
-				} else if m.FocusIndex < 0 {
-					m.FocusIndex = len(m.Files)
+					if (key == "down" || key == "j") && m.FocusIndex >= m.Viewport.Height+m.Viewport.YOffset {
+						m.Viewport.LineDown(1)
+					}
+
+					if (key == "up" || key == "k") && m.FocusIndex < m.Viewport.YOffset {
+						m.Viewport.LineUp(1)
+					}
+
+					if m.FocusIndex >= len(m.Files) {
+						m.Viewport.GotoTop()
+						m.FocusIndex = 0
+					} else if m.FocusIndex < 0 {
+						m.Viewport.GotoBottom()
+						m.FocusIndex = len(m.Files) - 1
+					}
+
+					m.SetViewportContent()
 				}
 			}
 		}
@@ -279,6 +313,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Screen = Files
 				m.FocusIndex = 0
 				m.ChoiceIndex = 0
+
+				m.SetViewportContent()
 			} else {
 				m.Screen = Main
 
@@ -354,6 +390,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+func (m *Model) SetViewportContent() {
+	var files string
+
+	for i, file := range m.Files {
+		selection := " "
+		if file.Selected {
+			selection = "x"
+		}
+		if m.ViewportFocused && m.FocusIndex == i {
+			files += fmt.Sprintf(FocusedConfig.UnsetMarginTop().Render("[%s] %s"), selection, filepath.Base(file.Path))
+		} else {
+			files += fmt.Sprintf(BlurredConfig.UnsetMarginTop().Render("[%s] %s"), selection, filepath.Base(file.Path))
+		}
+
+		files += "\n"
+	}
+
+	m.Viewport.SetContent(files)
+}
+
 func parseConfig(cfg []Config) ParsedConfig {
 	vEncoder := find(cfg, "Video Encoder")
 	aEncoder := find(cfg, "Audio Encoder")
@@ -370,9 +426,8 @@ func parseConfig(cfg []Config) ParsedConfig {
 	}
 }
 
-func FilesScreenView(m Model) string {
+func FilesScreenViewHeader(m Model) string {
 	view := lipgloss.NewStyle().Margin(1, 0).Render("Select the files you wish to encode.")
-	var files string
 	var buttons string
 	var selectAllBtnText string
 
@@ -393,7 +448,7 @@ func FilesScreenView(m Model) string {
 		focusedStartButton = DisabledStartButton
 	}
 
-	if m.FocusIndex == 0 {
+	if !m.ViewportFocused {
 		if m.ChoiceIndex == 0 {
 			buttons = lipgloss.JoinHorizontal(0, FocusedSelectAllButton.Render(selectAllBtnText), blurredStartButton)
 		} else {
@@ -403,22 +458,15 @@ func FilesScreenView(m Model) string {
 		buttons = lipgloss.JoinHorizontal(0, BlurredSelectAllButton.Render(selectAllBtnText), blurredStartButton)
 	}
 
-	// TODO: files should be a scrollable grid
-	for i, file := range m.Files {
-		selection := " "
-		if file.Selected {
-			selection = "x"
-		}
-		if m.FocusIndex == i+1 {
-			files += fmt.Sprintf(FocusedConfig.Render("[%s] %s"), selection, filepath.Base(file.Path))
-		} else {
-			files += fmt.Sprintf(BlurredConfig.Render("[%s] %s"), selection, filepath.Base(file.Path))
-		}
-	}
-
-	view += lipgloss.JoinVertical(0, buttons, files)
+	view += buttons
 
 	return view
+}
+
+func FilesScreenView(m Model) string {
+	// TODO: files should be a grid (?)
+
+	return lipgloss.JoinVertical(0, FilesScreenViewHeader(m), m.Viewport.View())
 }
 
 func CfgScreenView(m Model) string {
