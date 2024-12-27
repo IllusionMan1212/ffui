@@ -42,6 +42,7 @@ func TempSock(totalDuration float64, teaP *tea.Program) string {
 	go func() {
 		re := regexp.MustCompile(`out_time_ms=(\d+)`)
 		speedRe := regexp.MustCompile(`speed=(\d+\.\d+x)`)
+		totalSizeRe := regexp.MustCompile(`total_size=(\d+)`)
 
 		fd, err := l.Accept()
 		if err != nil {
@@ -65,6 +66,12 @@ func TempSock(totalDuration float64, teaP *tea.Program) string {
 				cp = fmt.Sprintf("%.2f", float64(c)/totalDuration/1000000)
 			}
 			if strings.Contains(data, "progress=end") {
+				totalSize := totalSizeRe.FindString(data)
+				if len(totalSize) > 0 && strings.Split(totalSize, "=")[1] == "0" {
+					// Command failed. Don't send a finishedEncodingVideo message.
+					// encode() will take care of reporting the error.
+					continue
+				}
 				cp = "done"
 				teaP.Send(finishedEncodingVideo{})
 				return
