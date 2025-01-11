@@ -125,7 +125,7 @@ func encode(file File, fileName string, teaP *tea.Program, cfg ParsedConfig) {
 	}
 
 	if !strings.HasPrefix(mType.String(), "video/") {
-		log.Fatalf("%s is not a valid video file\n", fileName)
+		log.Fatalf("%s is not a valid video file. It is %v\n", fileName, mType)
 	}
 
 	parentDir := filepath.Dir(file.Path)
